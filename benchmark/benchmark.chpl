@@ -1,7 +1,6 @@
 config var nElements = 128 * 1024;
 config var nTrials = 10;
 config var step = 1;
-config var localeDistributed = 0;
 
 use IO;
 use DistributedQueue;
@@ -20,22 +19,22 @@ proc main() {
     var timer = new Timer();
     timer.start();
 
-    if localeDistributed {
-      coforall loc in Locales {
-        on loc {
-          forall j in 1 .. nElements {
-            queue.enqueue(j);
-          }
+    coforall loc in Locales {
+      on loc {
+        writeln(here, " has started...");
+        var iterations = nElements;
+        forall j in 1 .. iterations {
+          queue.enqueue(j);
         }
-      }
-    } else {
-      forall j in 1 .. nElements * numLocales {
-        queue.enqueue(j);
+        writeln(here, " has finished...");
       }
     }
 
+
     timer.stop();
     trialTime[i] = (numLocales * nElements) / timer.elapsed();
+    write("\n", i, "/", nTrials, ": ", (+ reduce trialTime) / i);
+    delete queue;
   }
   writer.write((+ reduce trialTime) / nTrials);
   writer.close();

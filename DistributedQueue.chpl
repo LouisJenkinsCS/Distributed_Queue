@@ -1,7 +1,7 @@
 use CyclicDist;
 use CombinedSynchronization;
 
-record LocaleDescriptor {
+class LocaleDescriptor {
     // Privatized type
     type eltType;
 
@@ -31,8 +31,10 @@ class DistributedQueue {
   proc DistributedQueue(type eltType) {
     // Create our descriptors
     coforall loc in Locales do
-      on loc do
+      on loc {
+        writeln("Locale #", here.id, ": Assigned index: ", getLocaleDescriptorIndex());
         descriptors[getLocaleDescriptorIndex()] = new LocaleDescriptor(eltType=this.eltType, localQueue=new CCQueue(eltType));
+      }
   }
 
   proc enqueue(elem : eltType) {
