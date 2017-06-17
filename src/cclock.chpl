@@ -15,7 +15,6 @@ class ccnode {
   var next : ccnode;
 }
 
-// Remove strict data types, let compiler infer...
 class cclock {
   // The shared data to be protected and operated on.
   var data : object;
@@ -51,7 +50,6 @@ class cclock {
     _tail.write(__primitive("cast", uint, dummyNode));
   }
 
-  // TODO: Local
   proc ccsync(request : object) : object {
     var counter = 0;
     var nextNode = new ccnode(request);

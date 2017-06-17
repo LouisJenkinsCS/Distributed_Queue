@@ -1,6 +1,11 @@
-use Distributed_FIFO;
+var dom = {1..10};
+var arr : [dom] int;
 
-writeln("Started...");
-var q = new Distributed_FIFO(int);
-for i in 1..10 do q.enqueue_async(i);
-q.flush();
+writeln(arr.domain);
+
+proc test(ref dom) {
+  dom = {1 .. 15};
+}
+
+test(dom);
+writeln(arr.domain);

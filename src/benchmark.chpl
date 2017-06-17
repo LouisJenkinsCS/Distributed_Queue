@@ -2,10 +2,9 @@ config var nElements = 128 * 1024;
 config var nTrials = 10;
 config var step = 1;
 config var localeDistributed = 0;
-config var asyncTest = 1;
 
 use IO;
-use Distributed_FIFO;
+use DistributedQueue;
 use Time;
 
 proc main() {
@@ -31,12 +30,9 @@ proc main() {
       }
     } else {
       forall j in 1 .. nElements * numLocales {
-        if asyncTest then queue.enqueue_async(j);
-        else queue.enqueue(j);
+        queue.enqueue(j);
       }
     }
-
-    if asyncTest then queue.flush();
 
     timer.stop();
     trialTime[i] = (numLocales * nElements) / timer.elapsed();
