@@ -1,4 +1,4 @@
-/*use BigInteger;
+/*use BigInteger;*/
 use Time;
 
 class ccnode {
@@ -100,6 +100,10 @@ class cclock {
     tmpNode.wait.write(false);
     return currNode.retval;
   }
+}
+
+/*proc main() {
+  test();
 }
 
 config var nOps = 1024 * 1024;

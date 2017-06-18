@@ -5,7 +5,7 @@ config var weak = 1;
 
 use IO;
 use CommDiagnostics;
-use DistributedQueue;
+use DistributedFIFOQueue;
 use Time;
 
 proc main() {
@@ -17,21 +17,25 @@ proc main() {
   var trialTime : [1 .. nTrials] real;
   // Obtain average time for enqueue...
   for i in 1 .. nTrials {
-    var queue = new DistributedQueue(int);
+    var queue = new DistributedFIFOQueue(int);
     var timer = new Timer();
     timer.start();
 
+    resetCommDiagnostics();
+    startCommDiagnostics();
     coforall loc in Locales {
       on loc {
         writeln(here, " has started...");
         var iterations = if weak then nElements / numLocales else nElements / 44;
-        var localQueue = queue.getLocalQueue();
+        var descr = queue.getLocalDescriptor();
         forall j in 1 .. iterations {
-          localQueue.enqueue(j);
+          queue.enqueue(j, descr);
         }
         writeln(here, " has finished...");
       }
     }
+    stopCommDiagnostics();
+    writeln(getCommDiagnostics());
 
 
     timer.stop();
