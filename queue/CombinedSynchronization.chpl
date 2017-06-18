@@ -1,8 +1,5 @@
 module CombinedSynchronization {
 
-  // The number of requests to serve until you switch to a new combiner...
-  config var maxRequests = 8;
-
   enum CCAction {
     ENQUEUE, DEQUEUE
   }
@@ -33,6 +30,7 @@ module CombinedSynchronization {
 
   class CCQueue {
     type eltType;
+    var maxRequests = 8;
 
     // Both head and tail are protected by their own respective CCLocks. Since
     // CCLock relies on callbacks, and first class functions in Chapel are very
@@ -56,7 +54,6 @@ module CombinedSynchronization {
     }
 
     proc cclockSync(request, ref dom, data) {
-      var _maxRequests = maxRequests;
       local {
         var counter = 0;
         ref _tail = if request == CCAction.ENQUEUE then tailCCTail else headCCTail;
@@ -88,7 +85,7 @@ module CombinedSynchronization {
         var tmpNode = currNode;
         var tmpNodeNext : CCNode(eltType);
 
-        while (tmpNode.next != nil && counter < _maxRequests) {
+        while (tmpNode.next != nil && counter < maxRequests) {
           counter = counter + 1;
           // Note: Ensures that we do not touch the current node after it is freed
           // by the owning thread...

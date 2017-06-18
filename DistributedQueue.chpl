@@ -37,6 +37,13 @@ class DistributedQueue {
       }
   }
 
+  // Due to the lack of privitization, each and every single access of this queue would
+  // cause significant penalties (I can't even begin to measure, but I mean in terms
+  // of literal magnitudes, like 10^k for some constant k (and probably k is about 3 to 4)).
+  proc getLocalQueue() : CCQueue(eltType) {
+    return descriptors[getLocaleDescriptorIndex()].localQueue;
+  }
+
   proc enqueue(elem : eltType) {
     descriptors[getLocaleDescriptorIndex()].localQueue.enqueue(elem);
   }
