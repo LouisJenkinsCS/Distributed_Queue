@@ -1,4 +1,4 @@
-class example {
+/*class example {
   var x : int = 0;
   var y : int = 1;
   var z : int = 2;
@@ -7,6 +7,17 @@ class example {
 
 class Field {
   var data : atomic uint;
+}
+
+// Note: Assumes the field is at 'offset' is word sized.
+proc getField(ref object, offset) : Field {
+  var ptr = __primitive("cast", uint, object);
+  var field = __primitive("cast", Field, ptr + offset);
+  return field;
+}
+
+proc ptrOf(ref object) : uint {
+  return __primitive("cast", uint, object);
 }
 
 enum MCASStatus {
@@ -21,10 +32,20 @@ class MCASDescr {
   var desired : example;
 }
 
-proc getField(ref object, offset) : Field {
-  var vptr = __primitive("cast", uint, object);
-  var field = __primitive("cast", Field, vptr + offset);
-  return field;
+class CCASDesc {
+  var addr : Field;
+  var expected : uint;
+  var want : uint;
+  var cond : Field;
+}
+
+
+
+proc CCAS(addr : Field, expected : uint, want : uint, cond : Field) : uint {
+  var desc = new CCASDesc(addr, expected, want, cond);
+  while !desc.addr.data.compareExchangeWeak(desc.expected, ptrOf(desc)) {
+
+  }
 }
 
 proc main() {
@@ -49,13 +70,13 @@ proc main() {
     var wantField = getField(descr.desired, offset);
     var expectedField = getField(descr.expected, offset);
     field.data.compareExchangeStrong(__primitive("cast", uint, descr), wantField.data.read());
-  }
+  }*/
   /*vptr = vptr + __primitive("sizeof", uint) : uint;*/
   /*var field = __primitive("cast", fieldSlot, vptr);*/
-  writeln(ex);
-}
+  /*writeln(ex);
+}*/
 
-
+/*
 
 
 proc doSomething(ex : example) {
@@ -64,4 +85,4 @@ proc doSomething(ex : example) {
   ex.z = 3;
   ex.w = 4;
   writeln(ex);
-}
+}*/
