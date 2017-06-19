@@ -1,27 +1,20 @@
 module CCQueue {
 
-  use LocalAtomicObject;
+  use cclock;
 
-  enum CCAction {
-    ENQUEUE, DEQUEUE
+  class enqueue_request {
+    type eltType;
+    var data : eltType;
   }
 
-  class CCNode {
+  class dequeue_request {
     type eltType;
-    // Our active request
-    var request : CCAction;
-    // By default we only have one element of data...
-    var dataDomain = {1 .. 1};
-    // ENQUEUE* operations use this to put data to be added
-    // DEQUEUE* operations use this to get data to be taken
-    var data : [dataDomain] eltType;
-    // What we are spinning on.
-    var wait : atomic bool;
-    // Is our operation completed? We only check this variable if we are not waiting,
-    // and if it is not complete then we become the combiner thread.
-    var completed : bool;
-    // Next in the queue.
-    var next : CCNode(eltType);
+  }
+
+  class dequeue_response {
+    type eltType;
+    var success : bool;
+    var elt : eltType;
   }
 
   class QueueNode {
@@ -34,132 +27,61 @@ module CCQueue {
     type eltType;
     var maxRequests = 8;
 
-    // Both head and tail are protected by their own respective CCLocks. Since
-    // CCLock relies on callbacks, and first class functions in Chapel are very
-    // buggy at the moment, so we need to inline the logic here.
     var head : QueueNode(eltType);
-    var headCounter : atomic int;
-    var headCCTail : LocalAtomicObject(CCNode(eltType));
+    var hlock : cclock;
     var tail : QueueNode(eltType);
-    var tailCounter : atomic int;
-    var tailCCTail : LocalAtomicObject(CCNode(eltType));
+    var tlock : cclock;
 
     proc CCQueue(type eltType) {
       local {
-        // Head and Tail require a dummy node, as do their respective locks...
-        headCCTail.write(new CCNode(eltType));
-        tailCCTail.write(new CCNode(eltType));
+        // Create and register our locks
+        var enqueue_dispatch = lambda (thiz : object, request : object) {
+          var requestObject = request : enqueue_request(eltType);
+          type typ = requestObject.eltType;
+          var thizQueue = thiz : CCQueue(typ);
+          var n = new QueueNode(typ);
+
+          n.elt = requestObject.data : typ;
+          thizQueue.tail.next = n;
+          thizQueue.tail = n;
+          return nil : object;
+        };
+        var dequeue_dispatch = lambda (thiz : object, request : object) {
+          var requestObject = request : dequeue_request(eltType);
+          type typ = requestObject.eltType;
+          var thizQueue = thiz : CCQueue(typ);
+          var node = thizQueue.head;
+          var next = node.next;
+
+          if next == nil then return new dequeue_response(eltType, false) : object;
+          var retval = next.elt;
+          thizQueue.head = next;
+          delete node;
+          return new dequeue_response(eltType, true, retval) : object;
+        };
+        this.hlock = new cclock(this, dequeue_dispatch);
+        this.hlock.initializer(this, dequeue_dispatch);
+        this.tlock = new cclock(this, enqueue_dispatch);
+        this.tlock.initializer(this, enqueue_dispatch);
+
+        // Create a dummy node...
         var n = new QueueNode(eltType);
         head = n;
         tail = n;
       }
     }
 
-    proc cclockSync(request, ref dom, data) {
-      local {
-        var counter = 0;
-        ref _tail = if request == CCAction.ENQUEUE then tailCCTail else headCCTail;
-        var nextNode = new CCNode(eltType);
-        nextNode.wait.write(true);
-        nextNode.completed = false;
-
-        // Register our dummy node so that the next task can add theirs safely,
-        // then fill out the node we assigned to use
-        var currNode = _tail.exchange(nextNode);
-        currNode.request = request;
-        currNode.next = nextNode;
-        currNode.dataDomain = dom;
-        currNode.data = data;
-
-        // Spin until we are finished...
-        currNode.wait.waitFor(false);
-
-        // If our operation is marked complete, we may safely reclaim it, as it is no
-        // longer being touched by the combiner thread
-        if currNode.completed {
-          dom = currNode.dataDomain;
-          var retval = currNode.data;
-          delete currNode;
-          return retval;
-        }
-
-        // If we are not marked as complete, we *are* the combiner thread
-        var tmpNode = currNode;
-        var tmpNodeNext : CCNode(eltType);
-
-        while (tmpNode.next != nil && counter < maxRequests) {
-          counter = counter + 1;
-          // Note: Ensures that we do not touch the current node after it is freed
-          // by the owning thread...
-          tmpNodeNext = tmpNode.next;
-
-          // Process...
-          select tmpNode.request {
-            when CCAction.ENQUEUE {
-              for i in tmpNode.data.domain {
-                var n = new QueueNode(eltType, tmpNode.data[i]);
-                tail.next = n;
-                tail = n;
-                tailCounter.fetchAdd(1);
-              }
-            } when CCAction.DEQUEUE {
-              var nElems = 0;
-              var availData : [tmpNode.dataDomain] eltType;
-              for i in tmpNode.data.domain {
-                // Nothing left...
-                if tailCounter.read() == headCounter.read() {
-                  break;
-                }
-
-                var node = head;
-                var next = node.next;
-                availData[i] = next.elt;
-                head = next;
-                delete node;
-
-                headCounter.fetchAdd(1);
-                nElems = nElems + 1;
-              }
-
-              tmpNode.dataDomain = {1 .. nElems};
-              tmpNode.data = availData;
-            }
-          }
-
-          // We are done with this one... Note that this uses an acquire barrier so
-          // that the owning task sees it as completed before wait is no longer true.
-          tmpNode.completed = true;
-          tmpNode.wait.write(false);
-
-          tmpNode = tmpNodeNext;
-        }
-
-        // At this point, it means one thing: Either we are on the dummy node, on which
-        // case nothing happens, or we exceeded the number of requests we can do at once,
-        // meaning we wake up the next thread as the combiner.
-        tmpNode.wait.write(false);
-        dom = currNode.dataDomain;
-        return currNode.data;
-      }
-    }
-
     proc enqueue(elt : eltType) {
-        var dom = {1 .. 1};
-        var arr : [dom] eltType;
-        arr[1] = elt;
-        cclockSync(CCAction.ENQUEUE, dom, arr);
+      var request = new enqueue_request(eltType, elt);
+      tlock.ccsync(request);
+      delete request;
     }
 
     proc dequeue () : (bool, eltType) {
-      var dom = {1 .. 1};
-      var arr : [dom] eltType;
-      var retval = cclockSync(CCAction.DEQUEUE, dom, arr);
-      if dom.first > dom.last {
-        return (false, _defaultOf(eltType));
-      }
-      else {
-        return (true, retval[1]);
-      }
+      var request = new dequeue_request(eltType);
+      var retval : dequeue_response(eltType) = hlock.ccsync(request) : dequeue_response(eltType);
+      delete request;
+      return (retval.success, retval.elt);
     }
   }
 

@@ -74,7 +74,7 @@ use CommDiagnostics;
   nature of the per-locale queues are nothing special, and if anything increase overall concurrency.
 */
 
-class LocaleDescriptor {
+class FIFOLocaleDescriptor {
   type eltType;
 
   // TODO: Find a way to get pointer to offset of atomic fields...
@@ -110,7 +110,7 @@ class DistributedFIFOQueue {
       retTuple[i] = queue;
       i = i + 1;
     }
-    return new LocaleDescriptor(eltType, retTuple);
+    return new FIFOLocaleDescriptor(eltType, retTuple);
   }
 
   proc enqueue(elem : eltType, descr) {

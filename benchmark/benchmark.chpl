@@ -2,10 +2,12 @@ config var nElements = 44 * 1024 * 1024;
 config var nTrials = 10;
 config var step = 1;
 config var weak = 1;
+config var isFIFO = 0;
 
 use IO;
 use CommDiagnostics;
 use DistributedFIFOQueue;
+use DistributedQueue;
 use Time;
 
 proc main() {
@@ -17,7 +19,10 @@ proc main() {
   var trialTime : [1 .. nTrials] real;
   // Obtain average time for enqueue...
   for i in 1 .. nTrials {
-    var queue = new DistributedFIFOQueue(int);
+    // We only use one or the other because compiler cannot infer type
+    var FIFO = new DistributedFIFOQueue(int);
+    var MPMC = new DistributedQueue(int);
+
     var timer = new Timer();
     timer.start();
 
@@ -27,9 +32,16 @@ proc main() {
       on loc {
         writeln(here, " has started...");
         var iterations = if weak then nElements / numLocales else nElements / 44;
-        var descr = queue.getLocalDescriptor();
-        forall j in 1 .. iterations {
-          queue.enqueue(j, descr);
+        if isFIFO {
+          var descr = FIFO.getLocalDescriptor();
+          forall j in 1 .. iterations {
+            FIFO.enqueue(j, descr);
+          }
+        } else {
+          var localQueue = MPMC.getLocalQueue();
+          forall j in 1 .. iterations {
+            localQueue.enqueue(j);
+          }
         }
         writeln(here, " has finished...");
       }
@@ -41,7 +53,8 @@ proc main() {
     timer.stop();
     trialTime[i] = (if weak then nElements else numLocales * (nElements / 44)) / timer.elapsed();
     write("\n", i, "/", nTrials, ": ", (+ reduce trialTime) / i);
-    delete queue;
+    delete FIFO;
+    delete MPMC;
   }
   writer.write((+ reduce trialTime) / nTrials);
   writer.close();
