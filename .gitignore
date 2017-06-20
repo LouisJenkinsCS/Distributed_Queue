@@ -30,6 +30,7 @@
 
 # Executables
 *.exe
+*.exe_real
 *.out
 *.out_real
 *.app

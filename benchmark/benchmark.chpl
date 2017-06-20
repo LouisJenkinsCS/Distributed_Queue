@@ -51,7 +51,7 @@ proc main() {
     coforall loc in Locales {
       on loc {
         if logLocaleInfo then writeln(here, " has started...");
-
+        var x : atomic real;
         var iterations = if weak then nElements / numLocales else nElements;
         if isFIFO {
           // Helps with privitization/localization
@@ -62,8 +62,7 @@ proc main() {
             var nComps = nComputations + (randStr.getNext() % nJitter);
             for i in 1 .. nComps {
               // Hopefully compiler doesn't throw away?
-              var x = sin(i);
-              x = x + 1;
+              x.write(sin(i));
             }
           }
         } else {
@@ -75,8 +74,7 @@ proc main() {
             var nComps = nComputations + (randStr.getNext() % nJitter);
             for i in 1 .. nComps {
               // Hopefully compiler doesn't throw away?
-              var x = sin(i);
-              x = x + 1;
+              x.write(sin(i));
             }
           }
         }
