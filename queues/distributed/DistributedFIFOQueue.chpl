@@ -1,6 +1,7 @@
 use CyclicDist;
 use CCQueue;
 use CommDiagnostics;
+use cclock;
 
 /*
   A distributed FIFO queue.
@@ -74,6 +75,11 @@ use CommDiagnostics;
   nature of the per-locale queues are nothing special, and if anything increase overall concurrency.
 */
 
+class head_response {
+  var hasElement : bool;
+  var idx : uint(64);
+}
+
 class FIFOLocaleDescriptor {
   type eltType;
 
@@ -85,8 +91,10 @@ class DistributedFIFOQueue {
   type eltType;
 
   // Two monotonically increasing counters used in deciding which locale to choose from
-  var head : atomic uint(64);
+  var head : uint(64);
   var tail : atomic uint(64);
+  // Head needs to be protected by lock as potential contention absolutely kills performance.
+  var headLock : cclock;
 
   // per-locale queues
   var domainMapping = {1 .. numLocales};
@@ -95,6 +103,23 @@ class DistributedFIFOQueue {
 
   // TODO: Custom Locales
   proc DistributedFIFOQueue(type eltType) {
+    // Register our CCLocks
+    var head_dispatch = lambda (thiz : object, request : object) : object {
+      var thizQueue = thiz : DistributedFIFOQueue(eltType);
+      if thizQueue.head == thizQueue.tail.read() {
+        return new head_response(false) : object;
+      } else {
+        var resp = new head_response(true, thizQueue.head) : object;
+        thizQueue.head = thizQueue.head + 1;
+        return resp;
+      }
+    };
+
+    // Register dispatches
+    // TODO: Do I still need to do this? Constructors should be working???
+    headLock = new cclock(this, head_dispatch);
+    headLock.initializer(this, head_dispatch);
+
     coforall loc in Locales {
       on loc {
         localQueues[localQueues.domain.localSubdomain().first] = new CCQueue(eltType);;
@@ -119,16 +144,9 @@ class DistributedFIFOQueue {
     on queue {
       localQueues[localQueues.domain.localSubdomain().first].enqueue(elem);
     }
-    /*// Migrate to the owning locale...
-    on this {
-
-      on this.localQueues[idx : int(64)] {
-        //
-        this.localQueues[localQueues.domain.localSubdomain().first].enqueue(elem);
-      }
-    }*/
   }
 
+  // TODO: Fix this race condition!
   proc dequeue() : (bool, eltType) {
     // The index we are going to be working on...
     var idx : uint(64);
@@ -136,35 +154,13 @@ class DistributedFIFOQueue {
 
     // Position is queried on the locale that owns the queue
     on this do {
-      var _head, _tail : uint(64);
-      var localHasElem : bool = true;
+      var resp = headLock.ccsync(nil : object) : head_response;
 
-      // Obtain our desired position
-      while (true) {
-        _head = head.read();
-        _tail = tail.read();
-
-        if (_head == _tail) {
-          /*writeln("Queue is empty... Pos: ", pos);*/
-          localHasElem = false;
-          break;
-        }
-
-        // Some platforms yield higher performance due to reduced memory contention
-        // under concurrent writes to the same cache line. We update the position
-        // atomically. We use a CAS here over a fetchAdd because we *only* want to
-        // increment the head if and only if the head != tail.
-        if (head.compareExchangeWeak(_head, _head + 1)) {
-          break;
-        }
+      if resp.hasElement {
+        idx = (resp.idx % (numLocales : uint(64))) + 1;
+      } else {
+        hasElem = resp.hasElement;
       }
-
-      if localHasElem {
-        // Translates to a single network call to write to the orginal locale's index
-        idx = (_head % (numLocales : uint(64))) + 1;
-      }
-
-      hasElem = localHasElem;
     }
 
     if !hasElem {

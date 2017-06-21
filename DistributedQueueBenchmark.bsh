@@ -5,19 +5,21 @@ LOCALES=(1 2 4 8 16 32 44);
 ENQUEUE_FILE="enqueue.csv";
 DEQUEUE_FILE="dequeue.csv";
 
+cd bin;
 echo > $ENQUEUE_FILE;
 echo > $DEQUEUE_FILE;
+echo > stdout.txt;
 
 echo -e "NumLocales,Op/Sec" >> $ENQUEUE_FILE;
 echo -e "NumLocales,Op/Sec" >> $DEQUEUE_FILE;
 
-// We run our benchmark repeatedly, qu
 for i in "${LOCALES[@]}"
 do
   echo "Launching with #" "$i";
-  echo "y" | ./a.out -nl $i;
+  echo "y" |./main.exe -nl $i --nJitter 5 --nComputations 10 --isFIFO 1 --nElements 1000000 >> stdout.txt;
   enqueueFile=$(<./tmp/enqueue"$i");
   dequeueFile=$(<./tmp/dequeue"$i");
+  echo "Enqueue: " "$enqueueFile" ", Dequeue: " "$dequeueFile";
   echo -e "$i" "," "$enqueueFile" >> $ENQUEUE_FILE;
   echo -e "$i" "," "$dequeueFile" >> $DEQUEUE_FILE;
 done
