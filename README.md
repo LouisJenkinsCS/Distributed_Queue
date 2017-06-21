@@ -1,26 +1,52 @@
 # Distributed Queue
 
-This is a Multi-Producer Multi-Consumer queue created to scale across HPC clusters.
-The queue is (work-in-progress) to utilize work stealing to ensure that memory consumption
-and computation time is evenly balanced across all clusters, although this does not come
-without cost, as we lose absolute FIFO ordering in favor of gaining performance. While the
-queue is not NUMA-aware, we minimize any and all memory contention to ensure performance
-on both UMA and NUMA architectures.
+This repository features two work-in-progress queues that scale under certain
+workloads, both with varying traits and practical use-cases. One queue provides
+a strict FIFO ordering across clusters (FIFO), and the other has more loose
+guarantees for ordering that employs work stealing (MPMC). Neither queues are
+NUMA-aware.
 
-For emphasis, __this queue favors scalability and performance over FIFO-ness__, as communications
-between HPC clusters are magnitudes slower and make it impossible to scale.
+## Queue Descriptions
 
-## Features
+All performance testing is done on a 44 core Intel Haswell machine (w/ 24 processors per node).
 
-### Work Stealing (WIP)
+## FIFO
 
-### Bulk Insertion and Removal (WIP)
+* Ensures FIFO ordering across multiple clusters
+* Enqueue operations scale well
+  * Bad under heavy contention due to Network Atomics
+* Dequeue operations do not scale
+  * Migrate to owning locale due to excess communication and synchronization
 
-#### Ranges and Arrays
+### Performance
 
-### FIFO ordering
+#### Enqueue
 
-The queue *can* be FIFO, but only under a few circumstances...
+![](EnqueueFIFO.png)
 
-1) Operations that are local are ensured to be FIFO, so long as work stealing is not employed. (MPMC)
-2) Operations across locales are FIFO so long as only one locale is a producer and another is a consumer. (MPMC)
+#### Dequeue
+
+**Work In Progress**
+
+## MPMC
+
+* Enqueue is communication free and scales very well
+* Dequeue is mostly communication free and scales very well
+  * Dequeue communications occur during work stealing
+* Employs Work Stealing algorithm to ensure that majority of operations may remain local
+* Does not ensure a global FIFO ordering, nor local due to work stealing.
+  * Possible to have FIFO ordering under certain circumstances...
+
+### Features
+
+#### Bulk Insertion and Removal (WIP)
+
+### Performance
+
+#### Enqueue
+
+![](EnqueueMPMC.png)
+
+#### Dequeue
+
+**Work In Progress**

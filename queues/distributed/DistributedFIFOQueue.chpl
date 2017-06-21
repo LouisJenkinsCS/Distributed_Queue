@@ -1,7 +1,6 @@
 use CyclicDist;
 use CCQueue;
 use CommDiagnostics;
-use cclock;
 
 /*
   A distributed FIFO queue.
@@ -94,7 +93,7 @@ class DistributedFIFOQueue {
   var head : uint(64);
   var tail : atomic uint(64);
   // Head needs to be protected by lock as potential contention absolutely kills performance.
-  var headLock : cclock;
+  var headLock$ : sync bool;
 
   // per-locale queues
   var domainMapping = {1 .. numLocales};
@@ -103,23 +102,6 @@ class DistributedFIFOQueue {
 
   // TODO: Custom Locales
   proc DistributedFIFOQueue(type eltType) {
-    // Register our CCLocks
-    var head_dispatch = lambda (thiz : object, request : object) : object {
-      var thizQueue = thiz : DistributedFIFOQueue(eltType);
-      if thizQueue.head == thizQueue.tail.read() {
-        return new head_response(false) : object;
-      } else {
-        var resp = new head_response(true, thizQueue.head) : object;
-        thizQueue.head = thizQueue.head + 1;
-        return resp;
-      }
-    };
-
-    // Register dispatches
-    // TODO: Do I still need to do this? Constructors should be working???
-    headLock = new cclock(this, head_dispatch);
-    headLock.initializer(this, head_dispatch);
-
     coforall loc in Locales {
       on loc {
         localQueues[localQueues.domain.localSubdomain().first] = new CCQueue(eltType);;
@@ -149,45 +131,45 @@ class DistributedFIFOQueue {
   // TODO: Fix this race condition!
   proc dequeue() : (bool, eltType) {
     // The index we are going to be working on...
-    var idx : uint(64);
     var hasElem : bool = true;
+    var elem : eltType;
 
     // Position is queried on the locale that owns the queue
     on this do {
-      var resp = headLock.ccsync(nil : object) : head_response;
+      var idx : uint(64);
+      headLock$.writeEF(true);
 
-      if resp.hasElement {
-        idx = (resp.idx % (numLocales : uint(64))) + 1;
+      if head != tail.read() {
+        idx = (head % (numLocales : uint(64))) + 1;
+        head = head + 1;
       } else {
-        hasElem = resp.hasElement;
+        hasElem = false;
       }
-    }
 
-    if !hasElem {
-      return (false, _defaultOf(eltType));
-    }
+      headLock$.reset();
 
-    // Now we get our item from the queue
-    // Note that at the index given, its possible that an enqueueing task has not
-    // finished yet, but we know there *should* be at least something for us, so we can
-    // spin until it has what we want.
-    ref queue = localQueues[idx : int(64)];
-    var elem : eltType;
-    on queue do {
-      var retval : (bool, eltType);
-      while !retval[1] {
-        retval = queue.dequeue();
+      if hasElem {
+        // Now we get our item from the queue
+        // Note that at the index given, its possible that an enqueueing task has not
+        // finished yet, but we know there *should* be at least something for us, so we can
+        // spin until it has what we want.
+        ref queue = localQueues[idx : int(64)];
+        on queue do {
+          var retval : (bool, eltType);
+          while !retval[1] {
+            retval = queue.dequeue();
 
-        if (!retval[1]) {
-          writeln(here, ": Spinning... HasElem: ", hasElem, ";");
-          chpl_task_yield();
+            if (!retval[1]) {
+              writeln(here, ": Spinning... HasElem: ", hasElem, ";");
+              chpl_task_yield();
+            }
+          }
+
+          // We have our value... this also translates into a network call (PUT)
+          elem = retval[2];
         }
       }
-
-      // We have our value... this also translates into a network call (PUT)
-      elem = retval[2];
     }
-
-    return (true, elem);
+    return (hasElem, elem);
   }
 }
