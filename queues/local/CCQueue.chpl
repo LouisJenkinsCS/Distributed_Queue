@@ -1,6 +1,7 @@
 module CCQueue {
 
   use cclock;
+  use Queue;
 
   class enqueue_request {
     type eltType;
@@ -23,8 +24,7 @@ module CCQueue {
     var next : QueueNode(eltType);
   }
 
-  class CCQueue {
-    type eltType;
+  class CCQueue : Queue {
     var maxRequests = 8;
 
     var head : QueueNode(eltType);

@@ -33,6 +33,34 @@ N x N | Total | Unique
 
 
 config const nQueens = 8;
+config const logBoard = 0;
+
+inline proc getTotalSolutions() {
+  var retval = 0;
+  select nQueens {
+    when 1 do retval = 1;
+    when 2 do retval = 0;
+    when 3 do retval = 0;
+    when 4 do retval = 2;
+    when 5 do retval = 10;
+    when 6 do retval = 4;
+    when 7 do retval = 40;
+    when 8 do retval = 92;
+    when 9 do retval = 352;
+    when 10 do retval = 724;
+    when 11 do retval = 2680;
+    when 12 do retval = 14200;
+    when 13 do retval = 73712;
+    when 14 do retval = 365596;
+    when 15 do retval = 2279184;
+    when 16 do retval = 14722512;
+    when 17 do retval = 95815104;
+    when 18 do retval = 666090624;
+    otherwise do halt("Bad parameter for nQueens: ", nQueens, "; Must be in 1 .. 18");
+  }
+
+  return retval;
+}
 
 proc findFirstEmptyRow(board) {
   var idx = 1;
@@ -102,22 +130,24 @@ proc canPlaceQueen(board, row, col) {
 }
 
 proc main() {
+  writeln("Starting...");
   var foundDom = { 1 .. numLocales };
   var foundDmap = foundDom dmapped Cyclic(startIdx=foundDom.low);
   var foundDist : [foundDmap] atomic int;
 
   var boardQueue = new DistributedFIFOQueue(26 * int);
-  boardQueue.enqueue(_defaultOf(boardQueue.eltType), boardQueue.getLocalDescriptor());
+  boardQueue.enqueue(_defaultOf(boardQueue.eltType));
   const N = nQueens;
+  const totalSolutions = getTotalSolutions();
+  var timer = new Timer();
+  timer.start();
 
   coforall loc in Locales do on loc do
     coforall tid in 0 .. #here.maxTaskPar {
-      var descr = boardQueue.getLocalDescriptor();
-
       var ourIdx = foundDist.domain.localSubdomain().first;
       // We spin on our local index, no communication cost needed, and its not
       // a class instance field so no cost on access.
-      while !foundDist[ourIdx].read() {
+      while foundDist[ourIdx].read() < totalSolutions {
         var (exists, myBoard) = boardQueue.dequeue();
         // Spin: We haven't found solution yet...
         if !exists {
@@ -129,16 +159,20 @@ proc main() {
         const firstEmptyRow = findFirstEmptyRow(myBoard);
         if firstEmptyRow == N+1 {  //no empty row
           // We are done: Alert everyone that it is done (including ourselves...)
-          for found in foundDist do found.write(1);
-          break;
+          for found in foundDist do found.add(1);
+          if logBoard then writeln(myBoard);
+          continue;
         }
         for j in 1..N {
           if canPlaceQueen(myBoard, firstEmptyRow, j) {
             var newBoard = myBoard;
             newBoard[firstEmptyRow] = j;
-            boardQueue.enqueue(newBoard, descr);
+            boardQueue.enqueue(newBoard);
           }
         }
       }
     }
+
+  timer.stop();
+  writeln("NQueens: ", timer.elapsed());
 }

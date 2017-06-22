@@ -1,6 +1,7 @@
 use CyclicDist;
 use CCQueue;
 use CommDiagnostics;
+use Queue;
 
 /*
   A distributed FIFO queue.
@@ -74,20 +75,7 @@ use CommDiagnostics;
   nature of the per-locale queues are nothing special, and if anything increase overall concurrency.
 */
 
-class head_response {
-  var hasElement : bool;
-  var idx : uint(64);
-}
-
-class FIFOLocaleDescriptor {
-  type eltType;
-
-  // TODO: Find a way to get pointer to offset of atomic fields...
-  var queues : 44 * CCQueue(eltType);
-}
-
-class DistributedFIFOQueue {
-  type eltType;
+class DistributedFIFOQueue : Queue {
 
   // Two monotonically increasing counters used in deciding which locale to choose from
   var head : uint(64);
@@ -109,26 +97,14 @@ class DistributedFIFOQueue {
     }
   }
 
-  // Keep communication cost down until privitization of instance fields...
-  proc getLocalDescriptor() {
-    var retTuple : 44 * CCQueue(eltType);
-    var i = 1;
-    for queue in localQueues {
-      retTuple[i] = queue;
-      i = i + 1;
-    }
-    return new FIFOLocaleDescriptor(eltType, retTuple);
-  }
-
-  proc enqueue(elem : eltType, descr) {
+  proc enqueue(elem : eltType) {
     var idx : uint(64) = (tail.fetchAdd(1) % (numLocales : uint(64))) + 1;
-    ref queue = descr.queues[idx : int(64)];
+    ref queue = localQueues[idx : int(64)];
     on queue {
       localQueues[localQueues.domain.localSubdomain().first].enqueue(elem);
     }
   }
 
-  // TODO: Fix this race condition!
   proc dequeue() : (bool, eltType) {
     // The index we are going to be working on...
     var hasElem : bool = true;
@@ -161,8 +137,14 @@ class DistributedFIFOQueue {
 
             if (!retval[1]) {
               writeln(here, ": Spinning... HasElem: ", hasElem, ";");
+
+              // TODO: Crashes here if type of queue is Queue(eltType) rather
+              // than being declared as the child CCQueue(eltType) and if this is not uncommented...
+              // Likely compiler issue...
+              /*writeln(retval);*/
               chpl_task_yield();
             }
+            /*writeln(queue);*/
           }
 
           // We have our value... this also translates into a network call (PUT)

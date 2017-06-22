@@ -74,7 +74,7 @@ class SyncDistrQueue {
   }
 }
 
-proc main() {
+/*proc main() {
   var timer = new Timer();
   var Q : Queue(int) = new Queue(int);
   var counter : atomic int;
@@ -105,4 +105,4 @@ proc main() {
   timer.stop();
 
   writeln("Done processing ", Q.size, " elements in ", timer.elapsed(), " seconds!");
-}
+}*/
