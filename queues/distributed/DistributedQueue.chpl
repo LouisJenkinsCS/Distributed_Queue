@@ -52,4 +52,5 @@ class DistributedQueue {
   proc dequeue() : (bool, eltType) {
     return descriptors[getLocaleDescriptorIndex()].localQueue.dequeue();
   }
+
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 export CHPL_LAUNCHER=pbs-aprun;
 export CHPL_LAUNCHER_WALLTIME=01:30:00;
-LOCALES=(1 4 8 16 32 44);
+LOCALES=(1 4 8 16 32);
 ENQUEUE_FILE="enqueue.csv";
 DEQUEUE_FILE="dequeue.csv";
 
