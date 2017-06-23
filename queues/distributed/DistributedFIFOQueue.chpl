@@ -1,7 +1,7 @@
 use CyclicDist;
-use CCQueue;
 use CommDiagnostics;
 use Queue;
+use SyncQueue;
 
 /*
   A distributed FIFO queue.
@@ -76,6 +76,7 @@ use Queue;
 */
 
 class DistributedFIFOQueue : Queue {
+  // TODO: Let user specify their own background queue...
 
   // Two monotonically increasing counters used in deciding which locale to choose from
   var head : uint(64);
@@ -86,22 +87,22 @@ class DistributedFIFOQueue : Queue {
   // per-locale queues
   var domainMapping = {1 .. numLocales};
   var cyclicDomain = domainMapping dmapped Cyclic(startIdx=domainMapping.low);
-  var localQueues : [cyclicDomain] CCQueue(eltType);
+  var localQueues : [cyclicDomain] SyncQueue(eltType);
 
   // TODO: Custom Locales
   proc DistributedFIFOQueue(type eltType) {
     coforall loc in Locales {
       on loc {
-        localQueues[localQueues.domain.localSubdomain().first] = new CCQueue(eltType);;
+        localQueues[localQueues.domain.localSubdomain().first] = new SyncQueue(eltType);
       }
     }
   }
 
-  proc enqueue(elem : eltType) {
+  proc enqueue(elt : eltType) {
     var idx : uint(64) = (tail.fetchAdd(1) % (numLocales : uint(64))) + 1;
     ref queue = localQueues[idx : int(64)];
     on queue {
-      localQueues[localQueues.domain.localSubdomain().first].enqueue(elem);
+      localQueues[localQueues.domain.localSubdomain().first].enqueue(elt);
     }
   }
 
@@ -113,7 +114,7 @@ class DistributedFIFOQueue : Queue {
     // Position is queried on the locale that owns the queue
     on this do {
       var idx : uint(64);
-      headLock$.writeEF(true);
+      headLock$ = true;
 
       if head != tail.read() {
         idx = (head % (numLocales : uint(64))) + 1;
@@ -122,7 +123,7 @@ class DistributedFIFOQueue : Queue {
         hasElem = false;
       }
 
-      headLock$.reset();
+      headLock$;
 
       if hasElem {
         // Now we get our item from the queue

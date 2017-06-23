@@ -7,8 +7,8 @@ all:
 
 NQueens:
 	chpl --devel --fast queues/distributed/DistributedFIFOQueue.chpl \
-	benchmark/NQueens.chpl queues/Queue.chpl queues/local/CCQueue.chpl \
-	misc/LocalAtomicObject.chpl benchmark/cclock.chpl --main-module NQueens
+	benchmark/NQueens.chpl queues/Queue.chpl queues/local/SyncQueue.chpl \
+	-o $(BIN) --main-module NQueens
 
 clean:
 	rm $(BIN) $(BIN)_real

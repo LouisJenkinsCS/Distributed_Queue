@@ -1,4 +1,5 @@
 use DistributedFIFOQueue;
+use Time;
 
 /*
 Precomputed number of solutions...
@@ -135,7 +136,7 @@ proc main() {
   var foundDmap = foundDom dmapped Cyclic(startIdx=foundDom.low);
   var foundDist : [foundDmap] atomic int;
 
-  var boardQueue = new DistributedFIFOQueue(26 * int);
+  var boardQueue : Queue(26 * int) = new DistributedFIFOQueue(26 * int);
   boardQueue.enqueue(_defaultOf(boardQueue.eltType));
   const N = nQueens;
   const totalSolutions = getTotalSolutions();
@@ -153,8 +154,6 @@ proc main() {
         if !exists {
           continue;
         }
-
-        writeln(myBoard);
 
         const firstEmptyRow = findFirstEmptyRow(myBoard);
         if firstEmptyRow == N+1 {  //no empty row
