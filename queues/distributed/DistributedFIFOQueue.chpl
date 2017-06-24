@@ -79,19 +79,19 @@ class DistributedFIFOQueue : Queue {
   // TODO: Let user specify their own background queue...
 
   // Two monotonically increasing counters used in deciding which locale to choose from
-  var head : uint(64);
-  var tail : atomic uint(64);
-  // Head needs to be protected by lock as potential contention absolutely kills performance.
-  var headLock$ : sync bool;
+  var head$ : sync uint = _defaultOf(uint);
+  var tail : atomic uint;
 
   // per-locale queues
-  var domainMapping = {1 .. numLocales};
-  var cyclicDomain = domainMapping dmapped Cyclic(startIdx=domainMapping.low);
-  var localQueues : [cyclicDomain] SyncQueue(eltType);
+  // localQueueSpace and localQueueDomain
+  // 0 based
+  var localQueueSpace = {0 .. numLocales - 1};
+  var localQueueDomain = localQueueSpace dmapped Cyclic(startIdx=localQueueSpace.low);
+  var localQueues : [localQueueDomain] Queue(eltType);
 
   // TODO: Custom Locales
   proc DistributedFIFOQueue(type eltType) {
-    coforall loc in Locales {
+    forall loc in Locales {
       on loc {
         localQueues[localQueues.domain.localSubdomain().first] = new SyncQueue(eltType);
       }
@@ -99,60 +99,63 @@ class DistributedFIFOQueue : Queue {
   }
 
   proc enqueue(elt : eltType) {
-    var idx : uint(64) = (tail.fetchAdd(1) % (numLocales : uint(64))) + 1;
-    ref queue = localQueues[idx : int(64)];
+    var idx : int = (tail.fetchAdd(1) % numLocales : uint) : int;
+    ref queue = localQueues[idx];
     on queue {
       localQueues[localQueues.domain.localSubdomain().first].enqueue(elt);
     }
   }
 
+  // TODO: Test idea...
+  // Question: With the elimination of contention for remote mutual exclusion (but very short)
+  // would this reduce the bottleneck to allow scalability?
+  // var _tail = tail.read();
+  // var _head = head$;
+  // if _head < _tail then head$ = _head + 1;
+  // else head$ = _head;
   proc dequeue() : (bool, eltType) {
-    // The index we are going to be working on...
-    var hasElem : bool = true;
-    var elem : eltType;
+    var (hasElem, elem) = (true, _defaultOf(eltType));
 
     // Position is queried on the locale that owns the queue
     on this do {
-      var idx : uint(64);
-      headLock$ = true;
+      // We localize 'hasElem' so as not to incur additional communication costs.
+      var idx : int;
+      var _hasElem = true;
 
-      if head != tail.read() {
-        idx = (head % (numLocales : uint(64))) + 1;
-        head = head + 1;
+      // At the time of the read, if tail > head, and because both are monotonically
+      // increasing counters, this remains true while we hold the lock.
+      var _tail = tail.read();
+      var _head = head$; // Empty
+      if _tail != _head {
+        idx = (_head % numLocales : uint) : int;
+        head$ = _head + 1; // Full
       } else {
-        hasElem = false;
+        _hasElem = false;
+        head$ = _head; // Full
       }
 
-      headLock$;
-
-      if hasElem {
+      if _hasElem {
         // Now we get our item from the queue
         // Note that at the index given, its possible that an enqueueing task has not
         // finished yet, but we know there *should* be at least something for us, so we can
         // spin until it has what we want.
-        ref queue = localQueues[idx : int(64)];
+        ref queue = localQueues[idx];
         on queue do {
           var retval : (bool, eltType);
           while !retval[1] {
-            retval = queue.dequeue();
+            retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
 
             if (!retval[1]) {
               writeln(here, ": Spinning... HasElem: ", hasElem, ";");
-
-              // TODO: Crashes here if type of queue is Queue(eltType) rather
-              // than being declared as the child CCQueue(eltType) and if this is not uncommented...
-              // Likely compiler issue...
-              /*writeln(retval);*/
               chpl_task_yield();
             }
-            /*writeln(queue);*/
           }
 
-          // We have our value... this also translates into a network call (PUT)
-          elem = retval[2];
+          (hasElem, elem) = retval;
         }
       }
     }
+
     return (hasElem, elem);
   }
 }

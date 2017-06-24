@@ -79,7 +79,7 @@ module CCQueue {
 
     proc dequeue () : (bool, eltType) {
       var request = new dequeue_request(eltType);
-      var retval : dequeue_response(eltType) = hlock.ccsync(request) : dequeue_response(eltType);
+      var retval = hlock.ccsync(request) : dequeue_response(eltType);
       delete request;
       return (retval.success, retval.elt);
     }

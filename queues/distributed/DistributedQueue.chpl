@@ -14,6 +14,7 @@ class DistributedQueue : Queue {
   // TODO: Need to accept custom locales...
   proc DistributedQueue(type eltType) {
     // Create our descriptors
+    // forall
     coforall loc in Locales do
       on loc {
         writeln("Locale #", here.id, ": Assigned index: ", getLocaleDescriptorIndex());
