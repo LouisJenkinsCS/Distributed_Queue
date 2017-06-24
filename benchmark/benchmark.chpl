@@ -23,7 +23,7 @@ config var logLocaleInfo = 0;
 use IO;
 use CommDiagnostics;
 use DistributedFIFOQueue;
-use DistributedQueue;
+/*use DistributedQueue;*/
 use Time;
 use Random;
 
@@ -42,7 +42,7 @@ proc main() {
     // We only use one or the other, but we must declare both.
     // TODO: Have both implement some parent 'Queue' class/interface?
     var FIFO = new DistributedFIFOQueue(int);
-    var MPMC = new DistributedQueue(int);
+    /*var MPMC = new DistributedQueue(int);*/
 
     var timer = new Timer();
     timer.start();
@@ -68,7 +68,7 @@ proc main() {
             }
           }
         } else {
-          // Helps with privitization/localization
+          /*// Helps with privitization/localization
           var localQueue = MPMC.getLocalQueue();
           var randStr = makeRandomStream(int);
           forall j in 1 .. iterations {
@@ -78,7 +78,7 @@ proc main() {
               // Hopefully compiler doesn't throw away?
               x.write(sin(i) : int);
             }
-          }
+          }*/
         }
 
         if logLocaleInfo then writeln(here, " has finished Enqueue...");
@@ -120,7 +120,7 @@ proc main() {
             }
           }
         } else {
-          // Helps with privitization/localization
+          /*// Helps with privitization/localization
           var localQueue = MPMC.getLocalQueue();
           var randStr = makeRandomStream(int);
           forall j in 1 .. iterations {
@@ -130,7 +130,7 @@ proc main() {
               // Hopefully compiler doesn't throw away?
               x.write(sin(i) : int);
             }
-          }
+          }*/
         }
 
         if logLocaleInfo then writeln(here, " has finished Dequeue...");
@@ -147,7 +147,7 @@ proc main() {
     writeln(i, "/", nTrials, ": ", (+ reduce dequeueTrialTime) / i);
 
     delete FIFO;
-    delete MPMC;
+    /*delete MPMC;*/
   }
   enqueueWriter.write((+ reduce enqueueTrialTime) / nTrials);
   dequeueWriter.write((+ reduce dequeueTrialTime) / nTrials);

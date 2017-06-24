@@ -115,6 +115,9 @@ class DistributedFIFOQueue : Queue {
     var _head : uint = head$; // Full -> Empty
 
     // BUG: Overflow will cause undefined behavior... fix later!
+    // IDEA: Since we hold the lock and can do work locally, we should use some
+    // combined synchronization here so that requests on this node can have increased
+    // throughput!
     if _head < _tail {
       // Increment head counter... Empty -> Full
       head$ = _head + 1;
