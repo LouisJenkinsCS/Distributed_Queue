@@ -29,8 +29,8 @@ class DistributedQueue : Queue {
     return descriptors[getLocaleDescriptorIndex()];
   }
 
-  proc enqueue(elem : eltType) {
-    descriptors[getLocaleDescriptorIndex()].enqueue(elem);
+  proc enqueue(elt : eltType) {
+    descriptors[getLocaleDescriptorIndex()].enqueue(elt);
   }
 
   proc dequeue() : (bool, eltType) {

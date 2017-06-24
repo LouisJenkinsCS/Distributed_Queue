@@ -152,6 +152,7 @@ proc main() {
         var (exists, myBoard) = boardQueue.dequeue();
         // Spin: We haven't found solution yet...
         if !exists {
+          writeln("Found: ", foundDist[ourIdx].read(), ", spinning...");
           continue;
         }
 

@@ -106,54 +106,41 @@ class DistributedFIFOQueue : Queue {
     }
   }
 
-  // TODO: Test idea...
-  // Question: With the elimination of contention for remote mutual exclusion (but very short)
-  // would this reduce the bottleneck to allow scalability?
-  // var _tail = tail.read();
-  // var _head = head$;
-  // if _head < _tail then head$ = _head + 1;
-  // else head$ = _head;
   proc dequeue() : (bool, eltType) {
     var (hasElem, elem) = (true, _defaultOf(eltType));
 
-    // Position is queried on the locale that owns the queue
-    on this do {
-      // We localize 'hasElem' so as not to incur additional communication costs.
-      var idx : int;
-      var _hasElem = true;
+    // Note: By reading the current tail first, we effectively eliminate everything
+    // down to two network calls; the read + lock-acquisition, and write + lock-release
+    var _tail : uint = tail.read();
+    var _head : uint = head$; // Full -> Empty
 
-      // At the time of the read, if tail > head, and because both are monotonically
-      // increasing counters, this remains true while we hold the lock.
-      var _tail = tail.read();
-      var _head = head$; // Empty
-      if _tail != _head {
-        idx = (_head % numLocales : uint) : int;
-        head$ = _head + 1; // Full
-      } else {
-        _hasElem = false;
-        head$ = _head; // Full
-      }
+    // BUG: Overflow will cause undefined behavior... fix later!
+    if _head < _tail {
+      // Increment head counter... Empty -> Full
+      head$ = _head + 1;
 
-      if _hasElem {
-        // Now we get our item from the queue
-        // Note that at the index given, its possible that an enqueueing task has not
-        // finished yet, but we know there *should* be at least something for us, so we can
-        // spin until it has what we want.
-        ref queue = localQueues[idx];
-        on queue do {
-          var retval : (bool, eltType);
-          while !retval[1] {
-            retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
+      // Now we get our item from the queue
+      // Note that at the index given, its possible that an enqueueing task has not
+      // finished yet, but we know there *should* be at least something for us, so we can
+      // spin until it has what we want.
+      ref queue = localQueues[(_head % numLocales : uint) : int];
+      on queue do {
+        var retval : (bool, eltType);
+        while !retval[1] {
+          retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
 
-            if (!retval[1]) {
-              writeln(here, ": Spinning... HasElem: ", hasElem, ";");
-              chpl_task_yield();
-            }
+          if (!retval[1]) {
+            writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", _head, ", tail: ", _tail);
+            chpl_task_yield();
           }
-
-          (hasElem, elem) = retval;
         }
+
+        (hasElem, elem) = retval;
       }
+    } else {
+      // Empty, writeback current head and release... Empty -> Full
+      head$ = _head;
+      hasElem = false;
     }
 
     return (hasElem, elem);

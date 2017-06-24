@@ -58,10 +58,9 @@ proc main() {
         var iterations = if weak then nElements / numLocales else nElements;
         if isFIFO {
           // Helps with privitization/localization
-          var descr = FIFO.getLocalDescriptor();
           var randStr = makeRandomStream(int);
           forall j in 1 .. iterations {
-            FIFO.enqueue(j, descr);
+            FIFO.enqueue(j);
             var nComps = nComputations + (if nJitter then (randStr.getNext() % nJitter) else 0);
             for i in 1 .. nComps {
               // Hopefully compiler doesn't throw away?
