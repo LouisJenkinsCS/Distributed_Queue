@@ -103,7 +103,7 @@ record WaitList {
 
 var privatizedQueues$ : sync bool;
 var privatizedSpace = { 0 .. 0 };
-var privatizedDomain = privatizedSpace dmapped Replicated();
+var privatizedDomain = privatizedSpace dmapped ReplicatedDist();
 var privatizedWaitList : [privatizedDomain] WaitList;
 var privatizedQueues : [privatizedDomain] Queue(int);
 config param privatizeFIFO = 1;
@@ -122,12 +122,12 @@ class DistributedFIFOQueue : Queue {
   // TODO: Let user specify their own background queue...
 
   // Two monotonically increasing counters used in deciding which locale to choose from
-  var globalHead$ : sync uint = _defaultOf(uint);
+  var globalHead : atomic uint;
   var globalTail : atomic uint;
 
   // per-locale data
   var perLocaleSpace = { 0 .. 0 };
-  var perLocaleDomain = perLocaleSpace dmapped Replicated();
+  var perLocaleDomain = perLocaleSpace dmapped ReplicatedDist();
   var localQueues : [perLocaleDomain] Queue(eltType);
   var localWaitList : [perLocaleDomain] WaitList;
 
@@ -173,14 +173,10 @@ class DistributedFIFOQueue : Queue {
 
     // If we are not marked as complete, we *are* the combiner thread, so begin
     // serving everyone's request. As the combiner, it is our sole obligation to
-    // contest for our global lock. Specific to the head, we must first read
-    // the current tail followed by the head, which lets us know if it is safe
-    // to take the next index.
-    var _tail = globalTail.peek();
-    var _head = globalHead$;
+    // contest for our global lock.
     var tmpNode = currNode;
     var tmpNodeNext : WaitListNode;
-    const maxRequests = if _head <= _tail then min(here.maxTaskPar, _tail - _head) else 0;
+    const maxRequests = here.maxTaskPar;
 
     while (tmpNode.next != nil && requestsServed < maxRequests) {
       requestsServed = requestsServed + 1;
@@ -188,9 +184,22 @@ class DistributedFIFOQueue : Queue {
       // by the owning thread...
       tmpNodeNext = tmpNode.next;
 
-      // Process...
-      tmpNode.idx = (_head % numLocales : uint) : int;
-      _head = _head + 1;
+      // Contend for head...
+      var successful : bool;
+      while true {
+        var _tail = globalTail.read();
+        var _head = globalHead.read();
+
+        // Full, we're done here...
+        if _head == _tail {
+          break;
+        }
+
+        // Contest...
+        if globalHead.compareExchangeStrong(_head, _head + 1) {
+            tmpNode.idx = (_head % numLocales : uint) : int;
+        }
+      }
 
       // We are done with this one... Note that this uses an acquire barrier so
       // that the owning task sees it as completed before wait is no longer true.
@@ -202,9 +211,7 @@ class DistributedFIFOQueue : Queue {
 
     // At this point, it means one thing: Either we are on the dummy node, on which
     // case nothing happens, or we exceeded the number of requests we can do at once,
-    // meaning we wake up the next thread as the combiner. As well, we must release
-    // the lock and writeback the new head.
-    globalHead$ = _head;
+    // meaning we wake up the next thread as the combiner.
     tmpNode.wait.write(false);
     return currNode.idx;
   }
@@ -233,7 +240,7 @@ class DistributedFIFOQueue : Queue {
         retval = (if privatizeFIFO then privatizedQueues[0] else localQueues[0]).dequeue();
 
         if (!retval[1]) {
-          writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", globalHead$.readXX(), ", tail: ", globalTail.peek());
+          writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", globalHead.peek(), ", tail: ", globalTail.peek());
           chpl_task_yield();
         }
       }
