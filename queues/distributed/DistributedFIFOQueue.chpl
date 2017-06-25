@@ -1,7 +1,8 @@
 use CyclicDist;
-use CommDiagnostics;
+use LocalAtomicObject;
 use Queue;
 use SyncQueue;
+use Random;
 
 /*
   A distributed FIFO queue.
@@ -75,19 +76,42 @@ use SyncQueue;
   nature of the per-locale queues are nothing special, and if anything increase overall concurrency.
 */
 
+class WaitListNode {
+  // Our served queue index
+  var idx : int = -1;
+
+  // If wait is false, we spin
+  // If wait is true, but completed is false, we are the new combiner thread
+  // If wait is true and completed is true, we are done and can exit
+  var wait : atomic bool;
+  var completed : bool;
+
+  // Next in the waitlist
+  var next : WaitListNode;
+}
+
+record WaitList {
+  var headWaitList : LocalAtomicObject(WaitListNode);
+  var tailWaitList : LocalAtomicObject(WaitListNode);
+
+  proc WaitList() {
+    headWaitList.write(new WaitListNode());
+    tailWaitList.write(new WaitListNode());
+  }
+}
+
 class DistributedFIFOQueue : Queue {
   // TODO: Let user specify their own background queue...
 
   // Two monotonically increasing counters used in deciding which locale to choose from
-  var head$ : sync uint = _defaultOf(uint);
-  var tail : atomic uint;
+  var globalHead$ : sync uint = _defaultOf(uint);
+  var globalTail$ : sync uint = _defaultOf(uint);
 
-  // per-locale queues
-  // localQueueSpace and localQueueDomain
-  // 0 based
-  var localQueueSpace = {0 .. numLocales - 1};
-  var localQueueDomain = localQueueSpace dmapped Cyclic(startIdx=localQueueSpace.low);
-  var localQueues : [localQueueDomain] Queue(eltType);
+  // per-locale data
+  var perLocaleSpace = {0 .. numLocales - 1};
+  var perLocaleDomain = perLocaleSpace dmapped Cyclic(startIdx=perLocaleSpace.low);
+  var localQueues : [perLocaleDomain] Queue(eltType);
+  var localWaitList : [perLocaleDomain] WaitList;
 
   // TODO: Custom Locales
   proc DistributedFIFOQueue(type eltType) {
@@ -98,8 +122,137 @@ class DistributedFIFOQueue : Queue {
     }
   }
 
+  proc getNextHeadIndex() : int {
+    // We want to ensure we do not serve more than the number of tasks
+    // that can potentially run on a node. This is so we don't end up serving repeated
+    // requesters and get starved, and (presumably) it is large enough to serve
+    // most use-cases and scenarios.
+    var requestsServed = 0;
+
+    // Create our dummy node
+    var nextNode = new WaitListNode();
+    nextNode.wait.write(true);
+    nextNode.completed = false;
+
+    // Register our dummy node...
+    var currNode = localWaitList[localWaitList.domain.localSubdomain().first].headWaitList.exchange(nextNode);
+    currNode.next = nextNode;
+
+    // Spin until we are alerted...
+    currNode.wait.waitFor(false);
+
+    // If our operation is marked complete, we may safely reclaim it, as it is no
+    // longer being touched by the combiner thread. We have officially been served...
+    if currNode.completed {
+      var retval = currNode.idx;
+      delete currNode;
+      return retval;
+    }
+
+    // If we are not marked as complete, we *are* the combiner thread, so begin
+    // serving everyone's request. As the combiner, it is our sole obligation to
+    // contest for our global lock. Specific to the head, we must first read
+    // the current tail followed by the head, which lets us know if it is safe
+    // to take the next index.
+    var _tail = globalTail$.readXX();
+    var _head = globalHead$;
+    var tmpNode = currNode;
+    var tmpNodeNext : WaitListNode;
+    const maxRequests = if _head <= _tail then min(here.maxTaskPar, _tail - _head) else 0;
+
+    while (tmpNode.next != nil && requestsServed < maxRequests) {
+      requestsServed = requestsServed + 1;
+      // Note: Ensures that we do not touch the current node after it is freed
+      // by the owning thread...
+      tmpNodeNext = tmpNode.next;
+
+      // Process...
+      tmpNode.idx = (_head % numLocales : uint) : int;
+      _head = _head + 1;
+
+      // We are done with this one... Note that this uses an acquire barrier so
+      // that the owning task sees it as completed before wait is no longer true.
+      tmpNode.completed = true;
+      tmpNode.wait.write(false);
+
+      tmpNode = tmpNodeNext;
+    }
+
+    // At this point, it means one thing: Either we are on the dummy node, on which
+    // case nothing happens, or we exceeded the number of requests we can do at once,
+    // meaning we wake up the next thread as the combiner. As well, we must release
+    // the lock and writeback the new head.
+    globalHead$ = _head;
+    tmpNode.wait.write(false);
+    return currNode.idx;
+  }
+
+  proc getNextTailIndex() : int {
+    // We want to ensure we do not serve more than the number of tasks
+    // that can potentially run on a node. This is so we don't end up serving repeated
+    // requesters and get starved, and (presumably) it is large enough to serve
+    // most use-cases and scenarios.
+    var requestsServed = 0;
+
+    // Create our dummy node
+    var nextNode = new WaitListNode();
+    nextNode.wait.write(true);
+    nextNode.completed = false;
+
+    // Register our dummy node...
+    var currNode = localWaitList[localWaitList.domain.localSubdomain().first].tailWaitList.exchange(nextNode);
+    currNode.next = nextNode;
+
+    // Spin until we are alerted...
+    currNode.wait.waitFor(false);
+
+    // If our operation is marked complete, we may safely reclaim it, as it is no
+    // longer being touched by the combiner thread. We have officially been served...
+    if currNode.completed {
+      var retval = currNode.idx;
+      delete currNode;
+      return retval;
+    }
+
+    // If we are not marked as complete, we *are* the combiner thread, so begin
+    // serving everyone's request. As the combiner, it is our sole obligation to
+    // contest for our global lock. Unlike the head, the tail doesn't care about
+    // the state of the head, as the queue is unbounded. Interesting extension:
+    // this can be made bounded by checking the distance between head and tail.
+    var _tail = globalTail$;
+    var tmpNode = currNode;
+    var tmpNodeNext : WaitListNode;
+    const maxRequests = here.maxTaskPar;
+
+    while (tmpNode.next != nil && requestsServed < maxRequests) {
+      requestsServed = requestsServed + 1;
+      // Note: Ensures that we do not touch the current node after it is freed
+      // by the owning thread...
+      tmpNodeNext = tmpNode.next;
+
+      // Process...
+      tmpNode.idx = (_tail % numLocales : uint) : int;
+      _tail = _tail + 1;
+
+      // We are done with this one... Note that this uses an acquire barrier so
+      // that the owning task sees it as completed before wait is no longer true.
+      tmpNode.completed = true;
+      tmpNode.wait.write(false);
+
+      tmpNode = tmpNodeNext;
+    }
+
+    // At this point, it means one thing: Either we are on the dummy node, on which
+    // case nothing happens, or we exceeded the number of requests we can do at once,
+    // meaning we wake up the next thread as the combiner. As well, we must release
+    // the lock and writeback the new head.
+    globalTail$ = _tail;
+    tmpNode.wait.write(false);
+    return currNode.idx;
+  }
+
   proc enqueue(elt : eltType) {
-    var idx : int = (tail.fetchAdd(1) % numLocales : uint) : int;
+    var idx = getNextTailIndex();
     ref queue = localQueues[idx];
     on queue {
       localQueues[localQueues.domain.localSubdomain().first].enqueue(elt);
@@ -108,44 +261,51 @@ class DistributedFIFOQueue : Queue {
 
   proc dequeue() : (bool, eltType) {
     var (hasElem, elem) = (true, _defaultOf(eltType));
-
-    // Note: By reading the current tail first, we effectively eliminate everything
-    // down to two network calls; the read + lock-acquisition, and write + lock-release
-    var _tail : uint = tail.read();
-    var _head : uint = head$; // Full -> Empty
-
-    // BUG: Overflow will cause undefined behavior... fix later!
-    // IDEA: Since we hold the lock and can do work locally, we should use some
-    // combined synchronization here so that requests on this node can have increased
-    // throughput!
-    if _head < _tail {
-      // Increment head counter... Empty -> Full
-      head$ = _head + 1;
-
-      // Now we get our item from the queue
-      // Note that at the index given, its possible that an enqueueing task has not
-      // finished yet, but we know there *should* be at least something for us, so we can
-      // spin until it has what we want.
-      ref queue = localQueues[(_head % numLocales : uint) : int];
-      on queue do {
-        var retval : (bool, eltType);
-        while !retval[1] {
-          retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
-
-          if (!retval[1]) {
-            writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", _head, ", tail: ", _tail);
-            chpl_task_yield();
-          }
-        }
-
-        (hasElem, elem) = retval;
-      }
-    } else {
-      // Empty, writeback current head and release... Empty -> Full
-      head$ = _head;
-      hasElem = false;
+    var _head = getNextHeadIndex();
+    if _head == -1 {
+      return (false, _defaultOf(eltType));
     }
 
+    // Now we get our item from the queue
+    // Note that at the index given, its possible that an enqueueing task has not
+    // finished yet, but we know there *should* be at least something for us, so we can
+    // spin until it has what we want.
+    ref queue = localQueues[_head];
+    on queue do {
+      var retval : (bool, eltType);
+      while !retval[1] {
+        retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
+
+        if (!retval[1]) {
+          writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", globalHead$.readXX(), ", tail: ", globalTail$.readXX());
+          chpl_task_yield();
+        }
+      }
+
+      (hasElem, elem) = retval;
+    }
     return (hasElem, elem);
   }
+}
+
+proc main() {
+  var nElems = 100000;
+  writeln("Starting MPMCQueue Proof of Correctness Test ~ nElems: ", nElems);
+
+  var queue = new DistributedFIFOQueue(int);
+  var randStr = Random.makeRandomStream(int);
+  for i in 1 .. nElems {
+    on Locales[randStr.getNext() % numLocales] do queue.enqueue(i);
+  }
+
+  for i in 1 .. nElems {
+    on Locales[randStr.getNext() % numLocales] {
+      var (hasElem, elem) = queue.dequeue();
+      if !hasElem || elem != i {
+        halt("FAILED TEST! Expected: ", i, ", Received: ", elem, "; HasElem: ", hasElem);
+      }
+    }
+  }
+
+  writeln("PASSED TEST!");
 }

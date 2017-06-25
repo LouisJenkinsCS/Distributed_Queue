@@ -9,7 +9,7 @@ Benchmark:
 	-o $(BIN) --main-module benchmark
 
 NQueens:
-	chpl --devel --fast queues/distributed/DistributedFIFOQueue.chpl \
+	chpl --devel --fast queues/distributed/DistributedFIFOQueue.chpl misc/LocalAtomicObject.chpl \
 	benchmark/NQueens.chpl queues/Queue.chpl queues/local/SyncQueue.chpl \
 	-o $(BIN) --main-module NQueens
 

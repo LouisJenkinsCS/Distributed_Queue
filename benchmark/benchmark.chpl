@@ -19,6 +19,7 @@ config var weak = 1;
 config var isFIFO = 0;
 // Whether or not we log communications and per-locale information.
 config var logLocaleInfo = 0;
+config var verboseLog = 0;
 
 use IO;
 use CommDiagnostics;
@@ -49,6 +50,7 @@ proc main() {
 
     if logLocaleInfo {
       resetCommDiagnostics();
+      if verboseLog then startVerboseComm();
       startCommDiagnostics();
     }
     coforall loc in Locales {
@@ -86,6 +88,7 @@ proc main() {
     }
 
     if logLocaleInfo {
+      if verboseLog then stopVerboseComm();
       stopCommDiagnostics();
       writeln(getCommDiagnostics());
     }
