@@ -3,6 +3,7 @@ use LocalAtomicObject;
 use Queue;
 use SyncQueue;
 use Random;
+use ReplicatedDist;
 
 /*
   A distributed FIFO queue.
@@ -100,16 +101,33 @@ record WaitList {
   }
 }
 
+var privatizedQueues$ : sync bool;
+var privatizedSpace = { 0 .. 0 };
+var privatizedDomain = privatizedSpace dmapped Replicated();
+var privatizedWaitList : [privatizedDomain] WaitList;
+var privatizedQueues : [privatizedDomain] Queue(int);
+config param privatizeFIFO = 1;
+
+// TODO: Expand...
+proc createPrivatizedQueue() {
+  forall loc in Locales {
+    on loc {
+      privatizedQueues[0] = new SyncQueue(int);
+      privatizedWaitList[0] = new WaitList();
+    }
+  }
+}
+
 class DistributedFIFOQueue : Queue {
   // TODO: Let user specify their own background queue...
 
   // Two monotonically increasing counters used in deciding which locale to choose from
   var globalHead$ : sync uint = _defaultOf(uint);
-  var globalTail$ : sync uint = _defaultOf(uint);
+  var globalTail : atomic uint;
 
   // per-locale data
-  var perLocaleSpace = {0 .. numLocales - 1};
-  var perLocaleDomain = perLocaleSpace dmapped Cyclic(startIdx=perLocaleSpace.low);
+  var perLocaleSpace = { 0 .. 0 };
+  var perLocaleDomain = perLocaleSpace dmapped Replicated();
   var localQueues : [perLocaleDomain] Queue(eltType);
   var localWaitList : [perLocaleDomain] WaitList;
 
@@ -117,8 +135,12 @@ class DistributedFIFOQueue : Queue {
   proc DistributedFIFOQueue(type eltType) {
     forall loc in Locales {
       on loc {
-        localQueues[localQueues.domain.localSubdomain().first] = new SyncQueue(eltType);
+        localQueues[0] = new SyncQueue(eltType);
       }
+    }
+
+    if privatizeFIFO {
+      createPrivatizedQueue();
     }
   }
 
@@ -135,7 +157,7 @@ class DistributedFIFOQueue : Queue {
     nextNode.completed = false;
 
     // Register our dummy node...
-    var currNode = localWaitList[localWaitList.domain.localSubdomain().first].headWaitList.exchange(nextNode);
+    var currNode = (if privatizeFIFO then privatizedWaitList[0] else localWaitList[0]).headWaitList.exchange(nextNode);
     currNode.next = nextNode;
 
     // Spin until we are alerted...
@@ -154,7 +176,7 @@ class DistributedFIFOQueue : Queue {
     // contest for our global lock. Specific to the head, we must first read
     // the current tail followed by the head, which lets us know if it is safe
     // to take the next index.
-    var _tail = globalTail$.readXX();
+    var _tail = globalTail.peek();
     var _head = globalHead$;
     var tmpNode = currNode;
     var tmpNodeNext : WaitListNode;
@@ -187,82 +209,17 @@ class DistributedFIFOQueue : Queue {
     return currNode.idx;
   }
 
-  proc getNextTailIndex() : int {
-    // We want to ensure we do not serve more than the number of tasks
-    // that can potentially run on a node. This is so we don't end up serving repeated
-    // requesters and get starved, and (presumably) it is large enough to serve
-    // most use-cases and scenarios.
-    var requestsServed = 0;
-
-    // Create our dummy node
-    var nextNode = new WaitListNode();
-    nextNode.wait.write(true);
-    nextNode.completed = false;
-
-    // Register our dummy node...
-    var currNode = localWaitList[localWaitList.domain.localSubdomain().first].tailWaitList.exchange(nextNode);
-    currNode.next = nextNode;
-
-    // Spin until we are alerted...
-    currNode.wait.waitFor(false);
-
-    // If our operation is marked complete, we may safely reclaim it, as it is no
-    // longer being touched by the combiner thread. We have officially been served...
-    if currNode.completed {
-      var retval = currNode.idx;
-      delete currNode;
-      return retval;
-    }
-
-    // If we are not marked as complete, we *are* the combiner thread, so begin
-    // serving everyone's request. As the combiner, it is our sole obligation to
-    // contest for our global lock. Unlike the head, the tail doesn't care about
-    // the state of the head, as the queue is unbounded. Interesting extension:
-    // this can be made bounded by checking the distance between head and tail.
-    var _tail = globalTail$;
-    var tmpNode = currNode;
-    var tmpNodeNext : WaitListNode;
-    const maxRequests = here.maxTaskPar;
-
-    while (tmpNode.next != nil && requestsServed < maxRequests) {
-      requestsServed = requestsServed + 1;
-      // Note: Ensures that we do not touch the current node after it is freed
-      // by the owning thread...
-      tmpNodeNext = tmpNode.next;
-
-      // Process...
-      tmpNode.idx = (_tail % numLocales : uint) : int;
-      _tail = _tail + 1;
-
-      // We are done with this one... Note that this uses an acquire barrier so
-      // that the owning task sees it as completed before wait is no longer true.
-      tmpNode.completed = true;
-      tmpNode.wait.write(false);
-
-      tmpNode = tmpNodeNext;
-    }
-
-    // At this point, it means one thing: Either we are on the dummy node, on which
-    // case nothing happens, or we exceeded the number of requests we can do at once,
-    // meaning we wake up the next thread as the combiner. As well, we must release
-    // the lock and writeback the new head.
-    globalTail$ = _tail;
-    tmpNode.wait.write(false);
-    return currNode.idx;
-  }
-
   proc enqueue(elt : eltType) {
-    var idx = getNextTailIndex();
-    ref queue = localQueues[idx];
-    on queue {
-      localQueues[localQueues.domain.localSubdomain().first].enqueue(elt);
+    var idx : int = (globalTail.fetchAdd(1) % numLocales : uint) : int;
+    on Locales[idx] {
+      (if privatizeFIFO then privatizedQueues[0] else localQueues[0]).enqueue(elt);
     }
   }
 
   proc dequeue() : (bool, eltType) {
     var (hasElem, elem) = (true, _defaultOf(eltType));
-    var _head = getNextHeadIndex();
-    if _head == -1 {
+    var idx = getNextHeadIndex();
+    if idx == -1 {
       return (false, _defaultOf(eltType));
     }
 
@@ -270,14 +227,13 @@ class DistributedFIFOQueue : Queue {
     // Note that at the index given, its possible that an enqueueing task has not
     // finished yet, but we know there *should* be at least something for us, so we can
     // spin until it has what we want.
-    ref queue = localQueues[_head];
-    on queue do {
+    on Locales[idx] do {
       var retval : (bool, eltType);
       while !retval[1] {
-        retval = localQueues[localQueues.domain.localSubdomain().first].dequeue();
+        retval = (if privatizeFIFO then privatizedQueues[0] else localQueues[0]).dequeue();
 
         if (!retval[1]) {
-          writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", globalHead$.readXX(), ", tail: ", globalTail$.readXX());
+          writeln(here, ": Spinning... HasElem: ", hasElem, ";", "head: ", globalHead$.readXX(), ", tail: ", globalTail.peek());
           chpl_task_yield();
         }
       }

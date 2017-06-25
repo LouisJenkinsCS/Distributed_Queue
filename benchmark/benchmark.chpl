@@ -104,6 +104,7 @@ proc main() {
 
     if logLocaleInfo {
       resetCommDiagnostics();
+      if verboseLog then startVerboseComm();
       startCommDiagnostics();
     }
     coforall loc in Locales {
@@ -141,6 +142,7 @@ proc main() {
     }
 
     if logLocaleInfo {
+      if verboseLog then stopVerboseComm();
       stopCommDiagnostics();
       writeln(getCommDiagnostics());
     }
