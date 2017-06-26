@@ -22,7 +22,7 @@ All performance testing is done on a 44 core Intel Haswell machine (w/ 24 proces
 
 #### Enqueue
 
-![](EnqueueFIFO.png)
+![](Results/EnqueueFIFO.png)
 
 #### Dequeue
 
@@ -45,7 +45,7 @@ All performance testing is done on a 44 core Intel Haswell machine (w/ 24 proces
 
 #### Enqueue
 
-![](EnqueueMPMC.png)
+![](Results/EnqueueMPMC.png)
 
 #### Dequeue
 
