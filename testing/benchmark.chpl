@@ -1,83 +1,127 @@
 use Time;
 
-class B {
-  // Number of iterations for the current benchmark to run...
-  var N : int;
-  // Some function that will setup data for the benchmark
-  var initFn : func(B, void);
-  // Some function that will cleanup the data after finished
-  var deinitFn : func(B, void);
-  // Data initialized by initFn...
-  var data : object;
-  // Whether we are 'weak scaling' or not; if we are, we delegate 'N' elements per node...
-  var isWeakScaling : bool;
-  //  Number of locales to use...
-  var nLocales = numLocales;
+record BenchmarkResult {
+  // Time in seconds requested units...
+  var time : real;
+  // The requested units... needed for calculating 'opsPerSec'
+  var unit : TimeUnits;
+  // Number of operations performed...
+  var operations : int;
 
-  // Determines the max time to run the benchmark for...
-  var maxDays = 0;
-  var maxHours = 0;
-  var maxMinutes = 0;
-  var maxSeconds = 30;
-  var maxMilliseconds = 0;
-  var maxMicroseconds = 0;
+  inline proc timeInSeconds {
+      select unit {
+        when TimeUnits.microseconds do return time *    1.0e-6;
+        when TimeUnits.milliseconds do return time *    1.0e-3;
+        when TimeUnits.seconds      do return time;
+        when TimeUnits.minutes      do return time *   60.0;
+        when TimeUnits.hours        do return time * 3600.0;
+    }
 
-  // Function to benchmark...
-  var benchFn : func(B, void);
-  var timer : Timer;
-
-  inline proc nanoseconds {
-    var ns : int(64);
-
-    // Days
-    ns = maxDays * 86400000000000;
-    // Hours
-    ns = ns + maxHours * 3600000000000;
-    // Minutes
-    ns = ns + maxMinutes * 60000000000;
-    // Seconds
-    ns = ns + maxSeconds * 1000000000;
-    // Milliseconds
-    ns = ns + maxMilliseconds * 1000000;
-    // Microseconds
-    ns = ns + maxMicroseconds * 1000;
-
-    return ns;
+    halt("TimeUnit ", unit, " is not supported...");
   }
 
-  proc run() {
-    if benchFn == nil {
-      halt("'benchFn' must be non-nil!");
+  inline proc opsPerSec {
+    return operations / timeInSeconds;
+  }
+}
+
+record BenchmarkData {
+  // User created data from 'initFn' which also gets cleaned up in 'deinitFn'.
+  var userData : object;
+  // Number of iterations to run for this task...
+  var iterations : int;
+}
+
+// Runs a benchmark and returns the result for the target number of locales.
+proc runBenchmark(
+  benchFn : func(BenchmarkData, void),
+  benchTime : real = 5,
+  unit: TimeUnits = TimeUnits.seconds,
+  initFn : func(object) = nil,
+  deinitFn : func(object, void) = nil,
+  targetLocales : [?targetLocDom] = Locales,
+  isWeakScaling : bool = false
+) : BenchmarkResult {
+  // Assertion
+  if benchFn == nil {
+    halt("'benchFn' must be non-nil!");
+  }
+
+  // Find the 'sweet-spot' for this benchmark that runs for specified amount of time.
+  var n = 1;
+  var timer = new Timer();
+  while n < 1e12 {
+    writeln("N=", n);
+
+    var benchData : BenchmarkData;
+    var totalOps = if isWeakScaling then n * here.maxTaskPar else n;
+    benchData.iterations = totalOps / here.maxTaskPar;
+    if initFn {
+      benchData.userData = initFn();
     }
-    var targetLocDom = {0..#nLocales};
-    var targetLocales : [targetLocDom] locale;
-    for idx in targetLocDom do targetLocales[idx] = Locales[idx];
 
-    var n = 1;
-    while n < 1e9 {
-      writeln("N=", n);
-      N = n;
-      if initFn then initFn(this);
-      timer.clear();
-      timer.start();
+    timer.clear();
+    timer.start();
 
-      coforall loc in targetLocales do on loc {
-        coforall tid in 0..#here.maxTaskPar {
-          benchFn(this);
+    coforall loc in targetLocales do on loc {
+      coforall tid in 0..#here.maxTaskPar {
+        benchFn(benchData);
+      }
+    }
+
+    timer.stop();
+    if deinitFn {
+      deinitFn(benchData.userData);
+    }
+
+    if timer.elapsed(unit) >= benchTime {
+      return new BenchmarkResult(time=timer.elapsed(unit), unit=unit, operations=totalOps);
+    }
+
+    n = n * 2;
+  }
+
+  halt("Exceeded 'n' of 1e12...");
+}
+
+// Runs multiple benchmarks for the specified tuple of targetLocales and and returns an array of results.
+/*proc runBenchmarkMultiple(
+  benchFn : func(BenchmarkData, void),
+  time : real,
+  targetLocales,
+  unit: TimeUnits = TimeUnits.seconds,
+  initFn : func(B, void) = nil,
+  deinitFn : func(B, void) = nil,
+  days : int = 0,
+  hours : int = 0,
+  minutes : int = 0,
+  seconds : int = 30,
+  milliseconds : int = 0,
+  microseconds : int = 0
+) {
+  // TODO
+}*/
+
+
+proc benchmarkAtomics() {
+  class atomicCounter { var c : atomic uint; }
+  var result = runBenchmark(
+      benchFn = lambda(bd : BenchmarkData) {
+        var counter = bd.userData : atomicCounter;
+        for i in 1 .. bd.iterations {
+            counter.c.fetchAdd(1);
         }
+      },
+      initFn = lambda() : object {
+        return new atomicCounter();
+      },
+      deinitFn = lambda(obj : object) {
+        delete obj;
       }
+  );
+  writeln(result.opsPerSec);
+}
 
-      timer.stop();
-      if deinitFn then deinitFn(this);
-
-      if (timer.elapsed(TimeUnits.microseconds) * 1000) >= nanoseconds {
-        writeln("Finished in ", timer.elapsed(), " seconds");
-        writeln("Ns/Op: ", (timer.elapsed(TimeUnits.microseconds) * 1000) / N);
-        writeln("Ops/Sec: ", N / ((timer.elapsed(TimeUnits.microseconds) * 1000) * 1e-9));
-        return;
-      }
-
-      n = n * 2;
-    }
-  }
+proc main() {
+  benchmarkAtomics();
 }
