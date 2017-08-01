@@ -3,32 +3,26 @@ use SynchronizedList;
 use Benchmark;
 use Plot;
 
-var nLocales : int;
-
 config param isWeakScaling = false;
 
-proc dbqBench(b : B) {
+proc dbqInit(b : B) {
   var targetLocDom = {0..#nLocales};
   var targetLocales : [targetLocDom] locale;
   for idx in targetLocDom do targetLocales[idx] = Locales[idx];
-  var cap = (if isWeakScaling then b.N * nLocales else b.N);
+  var cap = (if b.isWeakScaling then b.N * b.nLocales else b.N);
 
-  var q = new DistributedBoundedQueue(int, cap=cap, targetLocDom=targetLocDom, targetLocales=targetLocales);
-  const nPerLoc = b.N / nLocales;
-  const nPerTask = if isWeakScaling then b.N / here.maxTaskPar else nPerLoc / here.maxTaskPar;
+  b.data = new DistributedBoundedQueue(int, cap=cap, targetLocDom=targetLocDom, targetLocales=targetLocales);
+}
 
-  b.timer.clear();
-  coforall loc in targetLocales do on loc {
-    coforall tid in 0..#here.maxTaskPar {
-      for i in 1 .. nPerTask {
-        q.add(i);
-      }
-    }
+proc dbqBench(b : B) {
+  var q = b.data : DistributedBoundedQueue(int);
+  for i in 1 .. b.N {
+    q.add(i);
   }
+}
 
-  b.timer.stop();
-  delete q;
-  b.timer.start();
+proc dbqDeinit(b : B) {
+  delete B.data;
 }
 
 proc slBench(b : B) {
@@ -62,9 +56,14 @@ proc main() {
   // DistributedBoundedQueue - Benchmark
   if numLocales == 1 then lastIter = true;
   while nLocales <= numLocales {
-    var b = new B();
-    b.benchTime = (0,0,0,5,0,0);
-    b.benchFunc = dbqBench;
+    var b = new B(
+      seconds=5,
+      benchFn=dbqBench,
+      initFn=dbqInit,
+      deinitFn=dbqDeinit,
+      nLocales=nLocales,
+      isWeakScaling=isWeakScaling
+    );
     b.run();
     var nElems = if isWeakScaling then b.N * nLocales else b.N;
     plotter.add("DistributedBoundedQueue - Enqueue", nLocales, nElems / ((b.timer.elapsed(TimeUnits.microseconds) * 1000) * 1e-9));
@@ -76,7 +75,7 @@ proc main() {
 
   lastIter = false;
   nLocales = 1;
-  
+
   // SyncList - Benchmark
   if numLocales == 1 then lastIter = true;
   while nLocales <= numLocales {
