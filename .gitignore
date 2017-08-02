@@ -59,3 +59,4 @@ codegen/*
 *.dat
 
 /*.png
+tmp/*

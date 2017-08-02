@@ -5,10 +5,10 @@ EXTRAFLAGS =
 
 # CHPLFLAGS can be used to add additional compiler flags to Chapel
 
-DistributedBoundedQueue-Benchmark:
+CollectionAdd-Benchmark:
 	chpl testing/Benchmark.chpl collections/DistributedBoundedQueue.chpl \
-	testing/collections/DistributedBoundedQueueBenchmark.chpl testing/Plot.chpl collections/SynchronizedList.chpl \
-	$(CHPLFLAGS) $(EXTRAFLAGS) --main-module DistributedBoundedQueueBenchmark -o $(OUT)
+	testing/collections/AddBenchmark.chpl testing/Plot.chpl collections/SynchronizedList.chpl \
+	$(CHPLFLAGS) $(EXTRAFLAGS) --main-module AddBenchmark -o $(OUT)
 
 clean:
 	rm $(OUT) $(OUT)_real
