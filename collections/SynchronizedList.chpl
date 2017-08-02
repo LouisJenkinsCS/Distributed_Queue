@@ -11,18 +11,16 @@ class SynchronizedList : List {
   var tail : SynchronizedListNode(eltType);
   var lock$ : sync bool;
 
-  proc add(elts : eltType ... ?nElts) : bool {
+  proc add(elt : eltType) : bool {
     on this {
       lock$ = true;
-      for elt in elts {
-        var node = new SynchronizedListNode(eltType, elt=elt);
-        if head == nil {
-          head = node;
-          tail = node;
-        } else {
-          tail.next = node;
-          tail = node;
-        }
+      var node = new SynchronizedListNode(eltType, elt=elt);
+      if head == nil {
+        head = node;
+        tail = node;
+      } else {
+        tail.next = node;
+        tail = node;
       }
       lock$;
     }
