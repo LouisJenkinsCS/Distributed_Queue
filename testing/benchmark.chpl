@@ -1,4 +1,5 @@
 use Time;
+use Plot;
 
 record BenchmarkResult {
   // Time in seconds requested units...
@@ -7,6 +8,8 @@ record BenchmarkResult {
   var unit : TimeUnits;
   // Number of operations performed...
   var operations : int;
+  // Number of locales used for this benchmark...
+  var nLocales : int;
 
   inline proc timeInSeconds {
       select unit {
@@ -75,7 +78,7 @@ proc runBenchmark(
     }
 
     if timer.elapsed(unit) >= benchTime {
-      return new BenchmarkResult(time=timer.elapsed(unit), unit=unit, operations=totalOps);
+      return new BenchmarkResult(time=timer.elapsed(unit), unit=unit, operations=totalOps, nLocales=targetLocales.size);
     }
 
     n = n * 2;
@@ -85,27 +88,51 @@ proc runBenchmark(
 }
 
 // Runs multiple benchmarks for the specified tuple of targetLocales and and returns an array of results.
-/*proc runBenchmarkMultiple(
+proc runBenchmarkMultiple(
   benchFn : func(BenchmarkData, void),
-  time : real,
-  targetLocales,
+  benchTime : real = 5,
   unit: TimeUnits = TimeUnits.seconds,
-  initFn : func(B, void) = nil,
-  deinitFn : func(B, void) = nil,
-  days : int = 0,
-  hours : int = 0,
-  minutes : int = 0,
-  seconds : int = 30,
-  milliseconds : int = 0,
-  microseconds : int = 0
+  initFn : func(object) = nil,
+  deinitFn : func(object, void) = nil,
+  isWeakScaling : bool = false,
+  targetLocales
 ) {
-  // TODO
-}*/
+  var results : targetLocales.size * BenchmarkResult;
+  var idx = 1;
+  for targetLoc in targetLocales {
+    if targetLoc > numLocales then continue;
+    var subLocales : [{0..#targetLoc}] locale;
+    for i in 0 .. #targetLoc do subLocales[i] = Locales[i];
+
+    results[idx] = runBenchmark(benchFn, benchTime, unit, initFn, deinitFn, subLocales, isWeakScaling);
+    idx = idx + 1;
+  }
+  return results;
+}
+
+proc runBenchmarkMultiplePlotted(
+  benchFn : func(BenchmarkData, void),
+  benchTime : real = 5,
+  unit: TimeUnits = TimeUnits.seconds,
+  initFn : func(object) = nil,
+  deinitFn : func(object, void) = nil,
+  isWeakScaling : bool = false,
+  targetLocales,
+  benchName : string,
+  ref plotter : Plotter(int, real)
+) {
+  var results = runBenchmarkMultiple(benchFn, benchTime, unit, initFn, deinitFn, isWeakScaling, targetLocales);
+  for result in results {
+    if result.operations == 0 || result.time == 0 then continue;
+    plotter.add(benchName, result.nLocales, result.opsPerSec);
+  }
+}
 
 
 proc benchmarkAtomics() {
   class atomicCounter { var c : atomic uint; }
-  var result = runBenchmark(
+  var plotter : Plotter(int, real);
+  runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
         var counter = bd.userData : atomicCounter;
         for i in 1 .. bd.iterations {
@@ -117,9 +144,13 @@ proc benchmarkAtomics() {
       },
       deinitFn = lambda(obj : object) {
         delete obj;
-      }
+      },
+      targetLocales=(1,2,4,8,16,32),
+      benchName = "AtomicFetchAdd",
+      plotter = plotter
   );
-  writeln(result.opsPerSec);
+
+  plotter.plot("AtomicFetchAdd");
 }
 
 proc main() {
