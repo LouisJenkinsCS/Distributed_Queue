@@ -1,6 +1,14 @@
 use Time;
 use Plot;
 
+record BenchmarkMetaData {
+  // Total numberof iterations to be run across all nodes...
+  var totalOps : int;
+  // Locales that will be used in this benchmark...
+  var targetLocDom : domain(1);
+  var targetLocales : [targetLocDom] locale;
+}
+
 record BenchmarkResult {
   // Time in seconds requested units...
   var time : real;
@@ -40,7 +48,7 @@ proc runBenchmark(
   benchFn : func(BenchmarkData, void),
   benchTime : real = 5,
   unit: TimeUnits = TimeUnits.seconds,
-  initFn : func(object) = nil,
+  initFn : func(BenchmarkMetaData, object) = nil,
   deinitFn : func(object, void) = nil,
   targetLocales : [?targetLocDom] = Locales,
   isWeakScaling : bool = false
@@ -60,7 +68,8 @@ proc runBenchmark(
     var totalOps = if isWeakScaling then n * here.maxTaskPar else n;
     benchData.iterations = totalOps / here.maxTaskPar;
     if initFn {
-      benchData.userData = initFn();
+      var meta = new BenchmarkMetaData(targetLocales=targetLocales, targetLocDom=targetLocDom, totalOps=totalOps);
+      benchData.userData = initFn(meta);
     }
 
     timer.clear();
@@ -92,7 +101,7 @@ proc runBenchmarkMultiple(
   benchFn : func(BenchmarkData, void),
   benchTime : real = 5,
   unit: TimeUnits = TimeUnits.seconds,
-  initFn : func(object) = nil,
+  initFn : func(BenchmarkMetaData, object) = nil,
   deinitFn : func(object, void) = nil,
   isWeakScaling : bool = false,
   targetLocales
@@ -114,7 +123,7 @@ proc runBenchmarkMultiplePlotted(
   benchFn : func(BenchmarkData, void),
   benchTime : real = 5,
   unit: TimeUnits = TimeUnits.seconds,
-  initFn : func(object) = nil,
+  initFn : func(BenchmarkMetaData, object) = nil,
   deinitFn : func(object, void) = nil,
   isWeakScaling : bool = false,
   targetLocales,
@@ -139,7 +148,7 @@ proc benchmarkAtomics() {
             counter.c.fetchAdd(1);
         }
       },
-      initFn = lambda() : object {
+      initFn = lambda(bmd : BenchmarkMetaData) : object {
         return new atomicCounter();
       },
       deinitFn = lambda(obj : object) {

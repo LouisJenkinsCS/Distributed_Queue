@@ -3,92 +3,54 @@ use Plot;
 use BlockDist;
 use CyclicDist;
 
-var nLocales : int;
-config param isWeakScaling = false;
-
-proc bdBenchmark(b : B) {
-  var targetLocDom = {0..#nLocales};
-  var targetLocales : [targetLocDom] locale;
-  for idx in targetLocDom do targetLocales[idx] = Locales[idx];
-  var nElems = (if isWeakScaling then b.N * nLocales else b.N);
-
-  var space = {1..nElems};
-  var dom = space dmapped Block(boundingBox=space, targetLocales=targetLocales);
-  var arr : [dom] int;
-
-  const nPerLoc = b.N / nLocales;
-  const nPerTask = if isWeakScaling then b.N / here.maxTaskPar else nPerLoc / here.maxTaskPar;
-
-  b.timer.clear();
-  coforall loc in targetLocales do on loc {
-    coforall tid in 0..#here.maxTaskPar {
-      for i in 1 .. nPerTask {
-        arr[i] = i;
-      }
-    }
-  }
-}
-
-proc cdBenchmark(b : B) {
-  var targetLocDom = {0..#nLocales};
-  var targetLocales : [targetLocDom] locale;
-  for idx in targetLocDom do targetLocales[idx] = Locales[idx];
-  var nElems = (if isWeakScaling then b.N * nLocales else b.N);
-
-  var space = {1..nElems};
-  var dom = space dmapped Cyclic(startIdx=space.low, targetLocales=targetLocales);
-  var arr : [dom] int;
-
-  const nPerLoc = b.N / nLocales;
-  const nPerTask = if isWeakScaling then b.N / here.maxTaskPar else nPerLoc / here.maxTaskPar;
-
-  b.timer.clear();
-  coforall loc in targetLocales do on loc {
-    coforall tid in 0..#here.maxTaskPar {
-      for i in 1 .. nPerTask {
-        arr[i] = i;
-      }
-    }
-  }
-}
-
 proc main() {
   var plotter : Plotter(int, real);
-  nLocales = 1;
-  var lastIter = false;
+  var targetLocales = (1,2,4,8,16,32,64);
+  class DistWrapper {
+    var dom : domain(1) = LocaleSpace;
+    var arr : [dom] int = Locales;
+  }
+
+  // Both distributions are accessed in the same way and so share the same benchFn
+  var benchFn = lambda(bd : BenchmarkData) {
+    ref arr = (bd.userData : DistWrapper).arr;
+    for i in 1 .. bd.iterations {
+      arr[i] = i;
+    }
+  };
+  var deinitFn = lambda(obj : object) {
+    delete obj;
+  };
 
   // BlockDist - Benchmark
-  if numLocales == 1 then lastIter = true;
-  while nLocales <= numLocales {
-    var b = new B();
-    b.benchTime = (0,0,0,5,0,0);
-    b.benchFunc = bdBenchmark;
-    b.run();
-    var nElems = if isWeakScaling then b.N * nLocales else b.N;
-    plotter.add("BlockDist", nLocales, nElems / ((b.timer.elapsed(TimeUnits.microseconds) * 1000) * 1e-9));
-
-    if lastIter then break;
-    nLocales = min(numLocales, nLocales * 2);
-    if nLocales == numLocales then lastIter = true;
-  }
-
-  nLocales = 1;
-  lastIter = false;
+  runBenchmarkMultiplePlotted(
+      benchFn = benchFn,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "BlockDist",
+      plotter = plotter,
+      initFn = lambda (bmd : BenchmarkMetaData) : object {
+        var space = {0..#bmd.totalOps};
+        var dom : domain(1) = space dmapped Block(boundingBox=space, targetLocales=bmd.targetLocales);
+        var arr : [dom] int;
+        return new DistWrapper(dom = dom, arr = arr);
+      }
+  );
 
   // CyclicDist - Benchmark
-  if numLocales == 1 then lastIter = true;
-  while nLocales <= numLocales {
-    var b = new B();
-    b.benchTime = (0,0,0,5,0,0);
-    b.benchFunc = cdBenchmark;
-    b.run();
-    var nElems = if isWeakScaling then b.N * nLocales else b.N;
-    plotter.add("CyclicDist", nLocales, nElems / ((b.timer.elapsed(TimeUnits.microseconds) * 1000) * 1e-9));
-
-    if lastIter then break;
-    nLocales = min(numLocales, nLocales * 2);
-    if nLocales == numLocales then lastIter = true;
-  }
+  runBenchmarkMultiplePlotted(
+      benchFn = benchFn,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "CyclicDist",
+      plotter = plotter,
+      initFn = lambda (bmd : BenchmarkMetaData) : object {
+        var space = {0..#bmd.totalOps};
+        var dom : domain(1) = space dmapped Cyclic(startIdx=space.low, targetLocales=bmd.targetLocales);
+        var arr : [dom] int;
+        return new DistWrapper(dom = dom, arr = arr);
+      }
+  );
 
   plotter.plot("BlockVsCyclicDist");
 }
