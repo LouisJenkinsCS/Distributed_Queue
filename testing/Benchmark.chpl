@@ -65,8 +65,9 @@ proc runBenchmark(
     writeln("N=", n);
 
     var benchData : BenchmarkData;
-    var totalOps = if isWeakScaling then n * here.maxTaskPar else n;
-    benchData.iterations = totalOps / here.maxTaskPar;
+    var nLocales = targetLocales.size;
+    var totalOps = if isWeakScaling then n * nLocales else n;
+    benchData.iterations = (totalOps / nLocales) / here.maxTaskPar;
     if initFn != nil {
       var meta = new BenchmarkMetaData(targetLocales=targetLocales, targetLocDom=targetLocDom, totalOps=totalOps);
       benchData.userData = initFn(meta);

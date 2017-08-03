@@ -1,7 +1,9 @@
 use Collection.Queue;
-use BlockDist;
+use CyclicDist;
 use Time;
 use Random;
+use Plot;
+use Benchmark;
 
 record DistributedBoundedFIFOSlot {
   type eltType;
@@ -32,13 +34,13 @@ class DistributedBoundedQueue : BoundedQueue {
   // To 'freeze' the queue, we must ensure that current mutating operations finish
   // first. However, at the same time we want to reduce communication by keeping
   // a task counter for each node that can be checked at next to no cost.
-  var concurrentTasksDom = targetLocales.domain dmapped Block(boundingBox=targetLocales.domain, targetLocales=targetLocales);
+  var concurrentTasksDom = targetLocales.domain dmapped Cyclic(startIdx=targetLocDom.low, targetLocales=targetLocales);
   var concurrentTasks : [concurrentTasksDom] atomic uint;
   var frozenState : [concurrentTasksDom] atomic bool;
 
   // per-locale data
   var eltSlotsSpace = {0..#cap};
-  var eltSlotsDomain = eltSlotsSpace dmapped Block(boundingBox=eltSlotsSpace, targetLocales=targetLocales);
+  var eltSlotsDomain = eltSlotsSpace dmapped Cyclic(startIdx=eltSlotsSpace.low, targetLocales=targetLocales);
   var eltSlots : [eltSlotsDomain] DistributedBoundedFIFOSlot(eltType);
 
   proc DistributedBoundedQueue(type eltType) {
@@ -176,4 +178,99 @@ class DistributedBoundedQueue : BoundedQueue {
       yield eltSlots[(idx % cap : uint) : int].elt;
     }
   }
+}
+
+
+proc main() {
+  var plotter : Plotter(int, real);
+  var targetLocales = (1,2,4,8,16,32,64);
+  var seconds = 30 : real;
+
+  var benchFn = lambda(bd : BenchmarkData) {
+    var c = bd.userData : DistributedBoundedQueue(int);
+    for i in 1 .. bd.iterations {
+      c.add(i);
+    }
+  };
+  var deinitFn = lambda(obj : object) {
+    delete obj;
+  };
+  var initFn = lambda (bmd : BenchmarkMetaData) : object {
+    return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+  };
+
+  // FreezeBarrier
+  runBenchmarkMultiplePlotted(
+      benchFn = lambda(bd : BenchmarkData) {
+        var c = bd.userData : DistributedBoundedQueue(int);
+        for i in 1 .. bd.iterations {
+          c.enterFreezeBarrier();
+          c.exitFreezeBarrier();
+        }
+      },
+      benchTime = seconds,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "FreezeBarrier",
+      plotter = plotter,
+      initFn = initFn
+  );
+
+  // Bounds Check
+  runBenchmarkMultiplePlotted(
+      benchFn = lambda(bd : BenchmarkData) {
+        var c = bd.userData : DistributedBoundedQueue(int);
+        for i in 1 .. bd.iterations {
+          if c.queueSize.read() >= c.cap {
+            continue;
+          }
+
+          while true {
+            var sz = c.queueSize.fetchAdd(1);
+            if sz >= c.cap {
+              continue;
+            } else if sz >= 0 {
+              break;
+            }
+          }
+        }
+      },
+      benchTime = seconds,
+      deinitFn = deinitFn,
+      targetLocales = targetLocales,
+      benchName = "BoundsCheck",
+      plotter = plotter,
+      initFn = initFn
+  );
+
+  // Slot Check...
+  runBenchmarkMultiplePlotted(
+      benchFn = lambda(bd : BenchmarkData) {
+        var c = bd.userData : DistributedBoundedQueue(int);
+        for i in 1 .. bd.iterations {
+          var head = c.globalHead.fetchAdd(1) % c.cap : uint;
+          ref slot = c.eltSlots[head : int];
+
+          // Another enqueuer is waiting on this cell...
+          while slot.isEnq.testAndSet() {
+            writeln("Waiting on another enqueuer...");
+            chpl_task_yield();
+          }
+
+          slot.status.waitFor(SLOT_EMPTY);
+          slot.elt = 0;
+          slot.status.write(SLOT_FULL);
+
+          slot.isEnq.write(false);
+        }
+      },
+      benchTime = seconds,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "SlotCheck",
+      plotter = plotter,
+      initFn = initFn
+  );
+
+  plotter.plot("DistributedBoundedQueue_Bottleneck");
 }
