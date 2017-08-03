@@ -60,7 +60,8 @@ class DistributedBoundedQueue : BoundedQueue {
   }
 
   proc add(elt : eltType) : bool {
-    ref freezeBarrier = concurrentTasks[ourConcurrentTasksIndex];
+    var ourIdx = ourConcurrentTasksIndex;
+    ref freezeBarrier = concurrentTasks[ourIdx];
     var _cap = cap;
     ref _queueSize = queueSize;
     ref _globalTail = globalTail;
@@ -69,7 +70,7 @@ class DistributedBoundedQueue : BoundedQueue {
     freezeBarrier.add(1);
 
     // Check if the queue is now 'immutable'.
-    if frozenState[ourConcurrentTasksIndex].read() == true {
+    if frozenState[ourIdx].read() == true {
       freezeBarrier.sub(1);
       return false;
     }
@@ -97,18 +98,20 @@ class DistributedBoundedQueue : BoundedQueue {
 
     var head = _globalTail.fetchAdd(1) % _cap : uint;
     ref slot = eltSlots[head : int];
+    ref status = slot.status;
+    ref isEnq = slot.isEnq;
 
     // Another enqueuer is waiting on this cell...
-    while slot.isEnq.testAndSet() {
+    while isEnq.testAndSet() {
       writeln("Waiting on another enqueuer...");
       chpl_task_yield();
     }
 
-    slot.status.waitFor(SLOT_EMPTY);
+    status.waitFor(SLOT_EMPTY);
     slot.elt = elt;
-    slot.status.write(SLOT_FULL);
+    status.write(SLOT_FULL);
 
-    slot.isEnq.write(false);
+    isEnq.write(false);
     freezeBarrier.sub(1);
     return true;
   }
@@ -209,8 +212,15 @@ proc main() {
       benchFn = lambda(bd : BenchmarkData) {
         var c = bd.userData : DistributedBoundedQueue(int);
         for i in 1 .. bd.iterations {
-          ref freezeCounter = c.concurrentTasks[c.ourConcurrentTasksIndex];
+          var ourIdx = c.ourConcurrentTasksIndex;
+          ref freezeCounter = c.concurrentTasks[ourIdx];
           freezeCounter.add(1);
+
+          if c.frozenState[ourIdx].read() == true {
+            freezeCounter.sub(1);
+            continue;
+          }
+
           freezeCounter.sub(1);
         }
       },
@@ -256,18 +266,20 @@ proc main() {
         for i in 1 .. bd.iterations {
           var head = c.globalHead.fetchAdd(1) % c.cap : uint;
           ref slot = c.eltSlots[head : int];
+          ref status = slot.status;
+          ref isEnq = slot.isEnq;
 
           // Another enqueuer is waiting on this cell...
-          while slot.isEnq.testAndSet() {
+          while isEnq.testAndSet() {
             writeln("Waiting on another enqueuer...");
             chpl_task_yield();
           }
 
-          slot.status.waitFor(SLOT_EMPTY);
+          status.waitFor(SLOT_EMPTY);
           slot.elt = 0;
-          slot.status.write(SLOT_FULL);
+          status.write(SLOT_FULL);
 
-          slot.isEnq.write(false);
+          isEnq.write(false);
         }
       },
       deinitFn = deinitFn,
