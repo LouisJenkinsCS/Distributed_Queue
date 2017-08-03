@@ -60,18 +60,23 @@ class DistributedBoundedQueue : BoundedQueue {
   }
 
   proc add(elt : eltType) : bool {
+    ref freezeBarrier = concurrentTasks[ourConcurrentTasksIndex];
+    var _cap = cap;
+    ref _queueSize = queueSize;
+    ref _globalTail = globalTail;
+
     // Announce that we are currently using the queue...
-    enterFreezeBarrier();
+    freezeBarrier.add(1);
 
     // Check if the queue is now 'immutable'.
     if frozenState[ourConcurrentTasksIndex].read() == true {
-      exitFreezeBarrier();
+      freezeBarrier.sub(1);
       return false;
     }
 
     // Fast path... Check if queue has space...
-    if queueSize.read() >= cap {
-      concurrentTasks[ourConcurrentTasksIndex].sub(1);
+    if _queueSize.read() >= _cap {
+      freezeBarrier.sub(1);
       return false;
     }
 
@@ -81,16 +86,16 @@ class DistributedBoundedQueue : BoundedQueue {
     // that the cases where we increment the queueSize and bail is fixed by
     // dequeue operations.
     while true {
-      var sz = queueSize.fetchAdd(1);
-      if sz >= cap {
-        exitFreezeBarrier();
+      var sz = _queueSize.fetchAdd(1);
+      if sz >= _cap {
+        freezeBarrier.sub(1);
         return false;
       } else if sz >= 0 {
         break;
       }
     }
 
-    var head = globalHead.fetchAdd(1) % cap : uint;
+    var head = _globalTail.fetchAdd(1) % _cap : uint;
     ref slot = eltSlots[head : int];
 
     // Another enqueuer is waiting on this cell...
@@ -104,7 +109,7 @@ class DistributedBoundedQueue : BoundedQueue {
     slot.status.write(SLOT_FULL);
 
     slot.isEnq.write(false);
-    exitFreezeBarrier();
+    freezeBarrier.sub(1);
     return true;
   }
 
@@ -135,8 +140,8 @@ class DistributedBoundedQueue : BoundedQueue {
     }
 
     while true {
-      var tail = globalTail.fetchAdd(1) % cap : uint;
-      ref slot = eltSlots[tail : int];
+      var head = globalHead.fetchAdd(1) % cap : uint;
+      ref slot = eltSlots[head : int];
       // Another dequeuer is waiting on this cell...
       while slot.isDeq.testAndSet() do chpl_task_yield();
 
@@ -204,11 +209,11 @@ proc main() {
       benchFn = lambda(bd : BenchmarkData) {
         var c = bd.userData : DistributedBoundedQueue(int);
         for i in 1 .. bd.iterations {
-          c.enterFreezeBarrier();
-          c.exitFreezeBarrier();
+          ref freezeCounter = c.concurrentTasks[c.ourConcurrentTasksIndex];
+          freezeCounter.add(1);
+          freezeCounter.sub(1);
         }
       },
-      benchTime = seconds,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "FreezeBarrier",
@@ -221,13 +226,15 @@ proc main() {
       benchFn = lambda(bd : BenchmarkData) {
         var c = bd.userData : DistributedBoundedQueue(int);
         for i in 1 .. bd.iterations {
-          if c.queueSize.read() >= c.cap {
+          ref queueSize = c.queueSize;
+          var cap = c.cap;
+          if queueSize.read() >= cap {
             continue;
           }
 
           while true {
-            var sz = c.queueSize.fetchAdd(1);
-            if sz >= c.cap {
+            var sz = queueSize.fetchAdd(1);
+            if sz >= cap {
               continue;
             } else if sz >= 0 {
               break;
@@ -235,7 +242,6 @@ proc main() {
           }
         }
       },
-      benchTime = seconds,
       deinitFn = deinitFn,
       targetLocales = targetLocales,
       benchName = "BoundsCheck",
@@ -264,7 +270,6 @@ proc main() {
           slot.isEnq.write(false);
         }
       },
-      benchTime = seconds,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "SlotCheck",
