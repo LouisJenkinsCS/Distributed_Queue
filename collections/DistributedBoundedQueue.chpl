@@ -54,7 +54,7 @@ class DistributedBoundedQueue : BoundedQueue {
   }
 
 
-  proc DistributedBoundedQueue(other, type eltType = other.eltType, cap = other.cap) {
+  proc DistributedBoundedQueue(other, type eltType = other.eltType, cap = other.cap, eltSlotsSpace = {0..-1}) {
   }
 
   proc dsiPrivatize(_ignored) {
@@ -62,7 +62,7 @@ class DistributedBoundedQueue : BoundedQueue {
   }
 
   proc dsiGetPrivatizeData() {
-    return this;
+    return eltSlots;
   }
 
   inline proc getPrivatizedThis {
@@ -222,87 +222,16 @@ proc main() {
     return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
   };
 
-  // FreezeBarrier
   runBenchmarkMultiplePlotted(
-      benchFn = lambda(bd : BenchmarkData) {
-        var c = bd.userData : DistributedBoundedQueue(int);
-        for i in 1 .. bd.iterations {
-          var ourIdx = c.ourConcurrentTasksIndex;
-          ref freezeCounter = c.concurrentTasks[ourIdx];
-          freezeCounter.add(1);
-
-          if c.frozenState[ourIdx].read() == true {
-            freezeCounter.sub(1);
-            continue;
-          }
-
-          freezeCounter.sub(1);
-        }
-      },
+      benchFn = benchFn,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "FreezeBarrier",
+      benchName = "DistributedBoundedQueue",
       plotter = plotter,
-      initFn = initFn
+      initFn = lambda (bmd : BenchmarkMetaData) : object {
+        return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+      }
   );
 
-  // Bounds Check
-  runBenchmarkMultiplePlotted(
-      benchFn = lambda(bd : BenchmarkData) {
-        var c = bd.userData : DistributedBoundedQueue(int);
-        for i in 1 .. bd.iterations {
-          ref queueSize = c.queueSize;
-          var cap = c.cap;
-          if queueSize.read() >= cap {
-            continue;
-          }
-
-          while true {
-            var sz = queueSize.fetchAdd(1);
-            if sz >= cap {
-              continue;
-            } else if sz >= 0 {
-              break;
-            }
-          }
-        }
-      },
-      deinitFn = deinitFn,
-      targetLocales = targetLocales,
-      benchName = "BoundsCheck",
-      plotter = plotter,
-      initFn = initFn
-  );
-
-  // Slot Check...
-  runBenchmarkMultiplePlotted(
-      benchFn = lambda(bd : BenchmarkData) {
-        var c = bd.userData : DistributedBoundedQueue(int);
-        for i in 1 .. bd.iterations {
-          var head = c.globalHead.fetchAdd(1) % c.cap : uint;
-          ref slot = c.eltSlots[head : int];
-          ref status = slot.status;
-          ref isEnq = slot.isEnq;
-
-          // Another enqueuer is waiting on this cell...
-          while isEnq.testAndSet() {
-            writeln("Waiting on another enqueuer...");
-            chpl_task_yield();
-          }
-
-          status.waitFor(SLOT_EMPTY);
-          slot.elt = 0;
-          status.write(SLOT_FULL);
-
-          isEnq.write(false);
-        }
-      },
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "SlotCheck",
-      plotter = plotter,
-      initFn = initFn
-  );
-
-  plotter.plot("DistributedBoundedQueue_Bottleneck");
+  plotter.plot("DistributedBoundedQueue_Performance");
 }
