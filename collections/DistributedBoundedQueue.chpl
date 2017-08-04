@@ -5,6 +5,8 @@ use Random;
 use Plot;
 use Benchmark;
 
+config param DistributedBoundedQueue_DoubleCheckBounds = false;
+
 record DistributedBoundedFIFOSlot {
   type eltType;
 
@@ -26,7 +28,8 @@ class DistributedBoundedQueue : BoundedQueue {
 
   var targetLocDom : domain(1) = LocaleSpace;
   var targetLocales: [targetLocDom] locale = Locales;
-  // Two monotonically increasing counters used in deciding which locale to choose from
+
+  // Keeps track of which slot we are on...
   var globalHead : atomic uint;
   var globalTail : atomic uint;
   var queueSize : atomic int;
@@ -34,50 +37,56 @@ class DistributedBoundedQueue : BoundedQueue {
   // To 'freeze' the queue, we must ensure that current mutating operations finish
   // first. However, at the same time we want to reduce communication by keeping
   // a task counter for each node that can be checked at next to no cost.
-  var concurrentTasksDom = targetLocales.domain dmapped Cyclic(startIdx=targetLocDom.low, targetLocales=targetLocales);
-  var concurrentTasks : [concurrentTasksDom] atomic uint;
-  var frozenState : [concurrentTasksDom] atomic bool;
+  var concurrentTasks : atomic uint;
+  var frozenState : atomic bool;
 
   // per-locale data
   var eltSlotsSpace = {0..#cap};
   var eltSlotsDomain = eltSlotsSpace dmapped Cyclic(startIdx=eltSlotsSpace.low, targetLocales=targetLocales);
   var eltSlots : [eltSlotsDomain] DistributedBoundedFIFOSlot(eltType);
 
-  proc DistributedBoundedQueue(type eltType) {
+  // Privatization id...
+  var pid : int;
+
+  proc DistributedBoundedQueue(type eltType, cap = 0, targetLocDom = LocaleSpace, targetLocales = Locales) {
     if cap == 0 then halt("Cap cannot be 0!");
+    pid = _newPrivatizedClass(this);
   }
 
-  inline proc ourConcurrentTasksIndex {
-    return concurrentTasksDom.localSubdomain().first;
+
+  proc DistributedBoundedQueue(other, type eltType = other.eltType, cap = other.cap) {
   }
 
-  inline proc enterFreezeBarrier() {
-    concurrentTasks[ourConcurrentTasksIndex].add(1);
+  proc dsiPrivatize(_ignored) {
+      return new DistributedBoundedQueue(this);
   }
 
-  inline proc exitFreezeBarrier() {
-    concurrentTasks[ourConcurrentTasksIndex].sub(1);
+  proc dsiGetPrivatizeData() {
+    return this;
+  }
+
+  inline proc getPrivatizedThis {
+    return chpl_getPrivatizedCopy(this.type, pid);
   }
 
   proc add(elt : eltType) : bool {
-    var ourIdx = ourConcurrentTasksIndex;
-    ref freezeBarrier = concurrentTasks[ourIdx];
-    var _cap = cap;
+    var localThis = getPrivatizedThis;
     ref _queueSize = queueSize;
     ref _globalTail = globalTail;
 
     // Announce that we are currently using the queue...
-    freezeBarrier.add(1);
+    local {
+      localThis.concurrentTasks.add(1);
 
-    // Check if the queue is now 'immutable'.
-    if frozenState[ourIdx].read() == true {
-      freezeBarrier.sub(1);
-      return false;
+      // Check if the queue is now 'immutable'.
+      if localThis.frozenState.read() == true {
+        localThis.concurrentTasks.sub(1);
+        return false;
+      }
     }
-
     // Fast path... Check if queue has space...
-    if _queueSize.read() >= _cap {
-      freezeBarrier.sub(1);
+    if DistributedBoundedQueue_DoubleCheckBounds && _queueSize.read() >= localThis.cap {
+      local { localThis.concurrentTasks.sub(1); }
       return false;
     }
 
@@ -88,16 +97,16 @@ class DistributedBoundedQueue : BoundedQueue {
     // dequeue operations.
     while true {
       var sz = _queueSize.fetchAdd(1);
-      if sz >= _cap {
-        freezeBarrier.sub(1);
+      if sz >= localThis.cap {
+        local { localThis.concurrentTasks.sub(1); }
         return false;
       } else if sz >= 0 {
         break;
       }
     }
 
-    var head = _globalTail.fetchAdd(1) % _cap : uint;
-    ref slot = eltSlots[head : int];
+    var tail = _globalTail.fetchAdd(1) % localThis.cap : uint;
+    ref slot = eltSlots[tail : int];
     ref status = slot.status;
     ref isEnq = slot.isEnq;
 
@@ -112,69 +121,75 @@ class DistributedBoundedQueue : BoundedQueue {
     status.write(SLOT_FULL);
 
     isEnq.write(false);
-    freezeBarrier.sub(1);
+    local { localThis.concurrentTasks.sub(1); }
     return true;
   }
 
   proc remove() : (bool, eltType) {
+    var localThis = getPrivatizedThis;
+    ref _queueSize = queueSize;
+
     // Announce that we are currently using the queue...
-    enterFreezeBarrier();
+    localThis.concurrentTasks.add(1);
 
     // Check if the queue is now 'immutable'.
-    if frozenState[ourConcurrentTasksIndex].read() == true {
-      exitFreezeBarrier();
+    if localThis.frozenState.read() == true {
+      localThis.concurrentTasks.sub(1);
       return (false, _defaultOf(eltType));
     }
 
     // Fast path... check if queue is empty...
-    if queueSize.read() < 1 {
-      exitFreezeBarrier();
+    if DistributedBoundedQueue_DoubleCheckBounds && _queueSize.read() < 1 {
+      localThis.concurrentTasks.sub(1);
       return (false, _defaultOf(eltType));
     }
 
     while true {
-      var sz = queueSize.fetchSub(1);
+      var sz = _queueSize.fetchSub(1);
       if sz <= 0 {
-        exitFreezeBarrier();
+        localThis.concurrentTasks.sub(1);
         return (false, _defaultOf(eltType));
-      } else if sz <= cap {
+      } else if sz <= localThis.cap {
         break;
       }
     }
 
-    while true {
-      var head = globalHead.fetchAdd(1) % cap : uint;
-      ref slot = eltSlots[head : int];
-      // Another dequeuer is waiting on this cell...
-      while slot.isDeq.testAndSet() do chpl_task_yield();
+    var head = globalHead.fetchAdd(1) % localThis.cap : uint;
+    ref slot = eltSlots[head : int];
+    ref status = slot.status;
+    ref isDeq = slot.isDeq;
 
-      slot.status.waitFor(SLOT_FULL);
-      var elt = slot.elt;
-      slot.status.write(SLOT_EMPTY);
+    // Another dequeuer is waiting on this cell...
+    while isDeq.testAndSet() do chpl_task_yield();
 
-      slot.isDeq.write(false);
-      exitFreezeBarrier();
-      return (true, elt);
-    }
+    status.waitFor(SLOT_FULL);
+    var elt = slot.elt;
+    status.write(SLOT_EMPTY);
 
-    halt("Broke out of dequeue loop...");
+    isDeq.write(false);
+    localThis.concurrentTasks.sub(1);
+    return (true, elt);
   }
 
   proc freeze() {
-    forall state in frozenState do state.write(true);
-
-    // Wait for all ongoing tasks to finish. Any new tasks will see the new state.
-    forall counter in concurrentTasks do counter.waitFor(0);
+    coforall loc in Locales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(true);
+      localThis.concurrentTasks.waitFor(0);
+    }
   }
 
   proc unfreeze() {
-    forall state in frozenState do state.write(false);
+    coforall loc in Locales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(false);
+    }
   }
 
   // TODO: Allow this to be parallel-safe with respect to the freezing operation.
   // Such as adding a second state after we know all concurrent tasks have exited.
   inline proc isFrozen {
-    return frozenState[ourConcurrentTasksIndex].read();
+    return getPrivatizedThis.frozenState.read();
   }
 
   iter these() : eltType {
