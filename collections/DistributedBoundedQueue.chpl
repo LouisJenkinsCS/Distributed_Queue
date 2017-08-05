@@ -171,6 +171,10 @@ class DistributedBoundedQueue : BoundedQueue {
     return (true, elt);
   }
 
+  proc capacity() {
+    return cap;
+  }
+
   proc freeze() {
     coforall loc in Locales do on loc {
       var localThis = getPrivatizedThis;

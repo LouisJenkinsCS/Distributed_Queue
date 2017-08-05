@@ -129,8 +129,8 @@ module Queue {
     /*
       Syntactic sugar for 'add'.
     */
-    inline proc enqueue(elts : eltType ... ?nElts) : bool {
-      return this.add((...elts));
+    inline proc enqueue(elt : eltType) : bool {
+      return this.add(elt);
     }
     /*
       Syntactic sugar for 'remove'
