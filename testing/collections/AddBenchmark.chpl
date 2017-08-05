@@ -1,4 +1,5 @@
 use DistributedBoundedQueue;
+use DistributedQueue;
 use SynchronizedList;
 use Collection;
 use Benchmark;
@@ -28,6 +29,18 @@ proc main() {
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+      }
+  );
+
+  // DistributedQueue - Benchmark
+  runBenchmarkMultiplePlotted(
+      benchFn = benchFn,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "DistributedQueue",
+      plotter = plotter,
+      initFn = lambda (bmd : BenchmarkMetaData) : object {
+        return new DistributedQueue(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
       }
   );
 

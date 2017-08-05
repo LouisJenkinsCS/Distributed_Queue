@@ -1,44 +1,43 @@
-# Distributed Queue
+# Distributed Data Structures
 
-This repository features two work-in-progress queues that scale under certain
-workloads, both with varying traits and practical use-cases. One queue provides
-a strict FIFO ordering across clusters (FIFO), and the other has more loose
-guarantees for ordering that employs work stealing (MPMC). Neither queues are
-NUMA-aware.
+This repository hosts the first framework for distributed data structures for the
+Chapel programming language. Here we introduce a 'Collections API', based on Java's
+Collections framework, as well as some data structures, some distributed, others
+local.
 
-## Queue Descriptions
+## Performance Testing
 
-All performance testing is done on Intel Haswell architecture (w/ 24 processors per node).
+All benchmarks performed on a Cray-XC40 cluster.
 
-## FIFO
+## Queues
 
 Provides a strict FIFO ordering without sacrificing too much performance. The FIFO ordering
 is preserved across all nodes in a cluster, and employs a wait-free round-robin approach
-to work distribution that ensures fairness in memory, bandwidth, and computation.
+to load distribution that ensures fairness in memory, bandwidth, and computation.
 
 ### Performance
 
+We compare our queues to a naive synchronized list implementation as that is all that
+is available.
+
 #### Enqueue
 
-![](Results/EnqueueFIFO.png)
+![](Results/Collections_Add.png)
 
 #### Dequeue
 
-![](Results/DequeueFIFO.png)
+TODO
 
-## Balanced Queue
+## Multiset
 
-A self-balancing queue that makes a best-effort in balancing loads across nodes in
-a cluster through work stealing and other means. An ideal backbone for a work queue.
-Currently the best scaling queue so far, seeing as high as 100M+ Operations/Second
-at 64 nodes.
+Does not provide any ordering whatsoever in favor of performance.
 
 ### Performance
 
-#### Enqueue
+#### Add
 
-![](Results/EnqueueBalanced.png)
+TODO
 
-#### Dequeue
+#### Remove
 
-![](Results/DequeueBalanced.png)
+TODO

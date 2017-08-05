@@ -1,4 +1,4 @@
-use Collection;
+use Collection.Queue;
 
 class DistributedQueueSlotNode {
   type eltType;
@@ -96,28 +96,34 @@ class DistributedQueue : Queue {
   // We maintain an array of slots, wherein each slot is a pointer into a node's
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
   // to reduce the amount of contention.
-  const nSlots = here.maxTaskPar * targetLocales.size;
+  var nSlots = here.maxTaskPar * targetLocales.size;
   var slotSpace = {0..#nSlots};
   var slots : [slotSpace] DistributedQueueSlot(eltType);
 
   proc DistributedQueue(type eltType, targetLocDom=LocaleSpace, targetLocales=Locales) {
+    nSlots = here.maxTaskPar * targetLocales.size;
+    slotSpace = {0..#nSlots};
+
     // Initialize each slot. We use a round-robin algorithm.
     var idx : atomic int;
-    for 1 .. here.maxTaskPar {
+    for 0 .. #here.maxTaskPar {
       for loc in targetLocales do on loc {
         var i = idx.fetchAdd(1);
-        slots[i] = new DistributedQueueSlotNode(eltType);
+        slots[i] = new DistributedQueueSlot(eltType);
       }
     }
 
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedQueue(other, type eltType = other.eltType, targetLocDom = other.targetLocDom, targetLocales = other.targetLocales, slots = other.slots) {
+  proc DistributedQueue(other, privData, type eltType = other.eltType) {
+    nSlots = other.nSlots;
+    slotSpace = other.slotSpace;
+    slots = privData;
   }
 
-  proc dsiPrivatize(_ignore) {
-      return new DistributedQueue(this);
+  proc dsiPrivatize(privData) {
+      return new DistributedQueue(this, privData);
   }
 
   proc dsiGetPrivatizeData() {
@@ -132,10 +138,14 @@ class DistributedQueue : Queue {
     var localThis = getPrivatizedThis;
     ref _globalTail = globalTail;
 
+    var _nSlots : int;
+    local { _nSlots = localThis.nSlots; }
+
     // Find a slot we can add to; skip over any with a negative size
     while true {
-      var tail = _globalTail.fetchAdd(1) % localThis.nSlots;
-      ref slot = localThis.slots[tail];
+      var tail = (_globalTail.fetchAdd(1) % _nSlots : uint) : int;
+      var slot : DistributedQueueSlot(eltType);
+      local { slot = localThis.slots[tail]; }
       var sz = slot.size.fetchAdd(1);
 
       if sz >= 0 {
@@ -151,7 +161,7 @@ class DistributedQueue : Queue {
     var localThis = getPrivatizedThis;
 
     // Find a slot we can take from; if the slot is empty, we bail as it is empty.
-    var head = globalHead.fetchAdd(1) % localThis.nSlots;
+    var head = (globalHead.fetchAdd(1) % localThis.nSlots : uint) : int;
     ref slot = localThis.slots[head];
     var sz = slot.size.fetchSub(1);
 
