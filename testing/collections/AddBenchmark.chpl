@@ -22,7 +22,7 @@ proc main() {
     delete obj;
   };
 
-  /*// DistributedBoundedQueue - Benchmark
+  // DistributedBoundedQueue - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
       deinitFn = deinitFn,
@@ -44,10 +44,10 @@ proc main() {
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         return new DistributedQueue(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
       }
-  );*/
+  );
 
   // SynchronizedList - Benchmark
-  /*runBenchmarkMultiplePlotted(
+  runBenchmarkMultiplePlotted(
       benchFn = benchFn,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
@@ -56,7 +56,7 @@ proc main() {
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         return new SynchronizedList(int);
       }
-  );*/
+  );
 
   // Compiler BUG: Generic Lambda issue...
   // DistributedList - Benchmark
@@ -93,7 +93,7 @@ proc main() {
       },
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedBag (w/ Localization)",
+      benchName = "DistributedBag with Localization",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         return new DistributedBag(int);

@@ -298,7 +298,7 @@ class Bag : Collection {
     workStealer.write(-1);
   }
 
-  proc add(elt : eltType) {
+  proc add(elt : eltType) : bool {
     var startIdx = nextStartIdxEnq;
     var idx = startIdx : int;
     var iterations = 0;
@@ -317,7 +317,7 @@ class Bag : Collection {
       if segment.acquireWithStatus(ENQUEUE) {
         segment.addElements(elt);
         segment.releaseStatus();
-        return;
+        return true;
       }
 
       iterations = iterations + 1;
@@ -345,7 +345,7 @@ class Bag : Collection {
             if segment.acquireWithStatus(ENQUEUE) {
               segment.addElements(elt);
               segment.releaseStatus();
-              return;
+              return true;
             }
           }
           // If someone is stealing, then that means that we'd be waiting for a while
@@ -781,8 +781,9 @@ class DistributedBag : Collection {
     return bags[bags.domain.localSubdomain().first];
   }
 
-  proc add(elt : eltType) {
+  proc add(elt : eltType) : bool {
     localBag.add(elt);
+    return true;
   }
 
   proc remove() : (bool, eltType) {
