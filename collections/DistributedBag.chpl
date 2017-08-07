@@ -772,13 +772,13 @@ class DistributedBag : Collection {
   proc DistributedBag(type eltType) {
     forall loc in Locales {
       on loc {
-        bags[bags.domain.localSubdomain().first] = new Bag(eltType, parentHandle=this);
+        bags[here.id] = new Bag(eltType, parentHandle=this);
       }
     }
   }
 
   inline proc localBag {
-    return bags[bags.domain.localSubdomain().first];
+    return bags[here.id];
   }
 
   proc add(elt : eltType) : bool {
