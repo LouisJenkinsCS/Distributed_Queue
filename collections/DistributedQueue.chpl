@@ -272,6 +272,18 @@ class DistributedQueue : Queue {
     }
   }
 
+  iter these(param tag : iterKind) where tag == iterKind.leader {
+    coforall slot in getPrivatizedThis.slots do on slot do yield slot;
+  }
+
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+    var node = followThis.head.next;
+    while node != nil {
+      yield node.elt;
+      node = node.next;
+    }
+  }
+
   proc ~DistributedQueue() {
     var localThis = getPrivatizedThis;
     for slot in localThis.slots do delete slot;
@@ -286,7 +298,7 @@ proc main() {
   }
   dq.freeze();
 
-  for elem in dq {
+  forall elem in dq {
     writeln(elem);
   }
 }
