@@ -212,7 +212,7 @@ class DistributedQueue : Queue {
     return (true, elt);
   }
 
-  inline proc isFrozen {
+  proc isFrozen() : bool {
     return getPrivatizedThis.frozenState.read();
   }
 
@@ -228,6 +228,28 @@ class DistributedQueue : Queue {
     coforall loc in Locales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(false);
+    }
+  }
+
+  /*
+    Iterate in FIFO order.
+
+    TODO: Once the issue of serial iteration leaking state is fixed, a simple
+    one-way channel implementation may prove very useful here to get an item
+    in a round-robin manner.
+  */
+  iter these() : eltType {
+    if !isFrozen() {
+      halt("Iteration only supported while frozen...");
+    }
+
+    var localThis = getPrivatizedThis;
+
+    // Fill our slots to visit in FIFO order.
+    var head = globalHead.read() % nSlots;
+    var [{0..#nSlots}] DistributedQueueSlotNode(eltType);
+    for offset in 0 .. #nSlots {
+
     }
   }
 

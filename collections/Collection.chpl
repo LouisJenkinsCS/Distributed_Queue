@@ -74,6 +74,26 @@ class Collection {
     halt("'iter these() : eltType' is not supported...");
     yield _defaultOf(eltType);
   }
+
+  // Freezes the collection, rendering it immutable.
+  inline proc freeze() : bool {
+    halt("'proc freeze() : bool' is not supported...");
+  }
+
+  // Unfreezes the collection, rendering it mutable.
+  inline proc unfreeze() : bool {
+    halt("'proc freeze() : bool' is not supported...");
+  }
+
+  // If this collection can be frozen.
+  inline proc canFreeze() : bool {
+    return false;
+  }
+
+  // If this collection is currently frozen.
+  inline proc isFrozen() : bool {
+    halt("'proc isFrozen() : bool' is not supported...");
+  }
 }
 
 module Stack {

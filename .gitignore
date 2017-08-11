@@ -60,3 +60,4 @@ codegen/*
 
 /*.png
 tmp/*
+log/*
