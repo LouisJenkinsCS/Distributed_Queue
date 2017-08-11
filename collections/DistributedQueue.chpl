@@ -298,7 +298,5 @@ proc main() {
   }
   dq.freeze();
 
-  forall elem in dq {
-    writeln(elem);
-  }
+  writeln(+ reduce dq);
 }
