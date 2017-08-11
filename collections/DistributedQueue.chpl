@@ -50,25 +50,24 @@ class DistributedQueueSlot {
     var elt : eltType;
     on this {
       var _elt : eltType;
-      local {
-        headLock$ = true;
-        var node = head;
-        var newHead = head.next;
+      headLock$ = true;
+      var node = head;
+      var newHead = head.next;
 
-        if newHead == nil {
-          var barrier : atomic uint;
-          while newHead == nil {
-            chpl_task_yield();
-            barrier.fetchAdd(1);
-            newHead = head.next;
-          }
+      if newHead == nil {
+        var barrier : atomic uint;
+        while newHead == nil {
+          chpl_task_yield();
+          barrier.fetchAdd(1);
+          newHead = head.next;
         }
-
-        head = newHead;
-        _elt = newHead.elt;
-        headLock$;
-        delete node;
       }
+
+      head = newHead;
+      _elt = newHead.elt;
+
+      headLock$;
+      delete node;
       elt = _elt;
     }
     return elt;
@@ -76,14 +75,12 @@ class DistributedQueueSlot {
 
   proc ~DistributedQueueSlot() {
     on this {
-      local {
-        var curr = head;
+      var curr = head;
 
-        while curr != nil {
-          var tmp = curr.next;
-          delete curr;
-          curr = tmp;
-        }
+      while curr != nil {
+        var tmp = curr.next;
+        delete curr;
+        curr = tmp;
       }
     }
   }
@@ -135,7 +132,7 @@ class DistributedQueue : Queue {
   proc DistributedQueue(other, privData, type eltType = other.eltType) {
     nSlots = other.nSlots;
     slotSpace = other.slotSpace;
-    slots = privData;
+    slots = other.slots;
   }
 
   proc dsiPrivatize(privData) {
@@ -143,7 +140,7 @@ class DistributedQueue : Queue {
   }
 
   proc dsiGetPrivatizeData() {
-    return slots;
+    return pid;
   }
 
   inline proc getPrivatizedThis {
@@ -198,7 +195,8 @@ class DistributedQueue : Queue {
     }
 
     // Find a slot we can take from; if the slot is empty, we bail as it is empty.
-    var head = (globalHead.fetchAdd(1) % localThis.nSlots : uint) : int;
+    var head = (globalHead.fetchAdd(1) % nSlots : uint) : int;
+    writeln("head: ", globalHead.read(), ", tail: ", globalTail.read(), ", idx: ", head);
     var slot : DistributedQueueSlot(eltType);
     local { slot = localThis.slots[head]; }
     var sz = slot.size.fetchSub(1);
@@ -220,7 +218,7 @@ class DistributedQueue : Queue {
   }
 
   proc freeze() : bool {
-    coforall loc in Locales do on loc {
+    coforall loc in targetLocales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(true);
       localThis.concurrentTasks.waitFor(0);
@@ -230,7 +228,7 @@ class DistributedQueue : Queue {
   }
 
   proc unfreeze() : bool {
-    coforall loc in Locales do on loc {
+    coforall loc in targetLocales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(false);
     }
@@ -323,6 +321,7 @@ class DistributedQueue : Queue {
   }
 
   // TODO: Make Convoy Avoidant
+  // BUG: Compiler cannot seem to find 'iter these()' at all...
   proc contains(elt : eltType) : bool {
     // Frozen lookups can be done concurrently
     if isFrozen() {

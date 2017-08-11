@@ -75,16 +75,6 @@ class Collection {
     yield _defaultOf(eltType);
   }
 
-  iter these(param tag : iterKind) : eltType {
-    halt("'iter these() : eltType' is not supported...");
-    yield _defaultOf(eltType);
-  }
-
-  iter these(param tag : iterKind, followThis) : eltType {
-    halt("'iter these() : eltType' is not supported...");
-    yield _defaultOf(eltType);
-  }
-
   // Freezes the collection, rendering it immutable.
   inline proc freeze() : bool {
     halt("'proc freeze() : bool' is not supported...");
