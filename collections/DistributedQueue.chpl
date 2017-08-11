@@ -1,4 +1,7 @@
 use Collection.Queue;
+use CollectionsTest;
+
+// TODO: Make most methods convoy avoidant (randomization and deferred processing)...
 
 class DistributedQueueSlotNode {
   type eltType;
@@ -216,19 +219,29 @@ class DistributedQueue : Queue {
     return getPrivatizedThis.frozenState.read();
   }
 
-  proc freeze() {
+  proc freeze() : bool {
     coforall loc in Locales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(true);
       localThis.concurrentTasks.waitFor(0);
     }
+
+    return true;
   }
 
-  proc unfreeze() {
+  proc unfreeze() : bool {
     coforall loc in Locales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(false);
     }
+
+    return true;
+  }
+
+  // To clear the data structure, we must be sure to update the counter while
+  // maintaining concurrent safety. The easiest way to do this is to just call remove.
+  proc clear() {
+    while remove()[1] do ;
   }
 
   /*
@@ -272,7 +285,91 @@ class DistributedQueue : Queue {
     }
   }
 
+  // TODO: Make convoy avoidant
+  inline proc removeItem(elt : eltType) : bool {
+    var localThis = getPrivatizedThis;
+    var removedItem : atomic bool;
+
+    for slot in localThis.slots {
+      on slot {
+        const targetElt = elt;
+        slot.headLock$ = true;
+        slot.tailLock$ = true;
+
+        var prev = slot.head;
+        var node = slot.head.next;
+        while node != nil {
+          if node.elt == targetElt {
+            prev.next = node.next;
+            if node == slot.tail then slot.tail = prev;
+            delete node;
+
+            removedItem.write(true);
+            break;
+          }
+        }
+
+        // Release...
+        slot.headLock$;
+        slot.tailLock$;
+      }
+
+      if removedItem.read() {
+        break;
+      }
+    }
+
+    return removedItem.read();
+  }
+
+  // TODO: Make Convoy Avoidant
+  proc contains(elt : eltType) : bool {
+    // Frozen lookups can be done concurrently
+    if isFrozen() {
+      var containsElem : atomic bool;
+      forall elem in this {
+        if elem == elt {
+          containsElem.write(true);
+        }
+      }
+      return containsElem.read();
+    }
+
+    // Non-frozen lookups require us to obtain the lock to ensure mutual exclusion
+    var localThis = getPrivatizedThis;
+    var foundItem : atomic bool;
+    for slot in localThis.slots {
+      on slot {
+        const targetElt = elt;
+        slot.headLock$ = true;
+        slot.tailLock$ = true;
+
+        var prev = slot.head;
+        var node = slot.head.next;
+        while node != nil {
+          if node.elt == targetElt {
+            foundItem.write(true);
+            break;
+          }
+        }
+
+        // Release...
+        slot.headLock$;
+        slot.tailLock$;
+      }
+
+      if foundItem.read() {
+        break;
+      }
+    }
+
+    return foundItem.read();
+  }
+
   iter these(param tag : iterKind) where tag == iterKind.leader {
+    if !isFrozen() {
+      halt("Iteration only supported while frozen...");
+    }
     coforall slot in getPrivatizedThis.slots do on slot do yield slot;
   }
 
@@ -293,10 +390,5 @@ class DistributedQueue : Queue {
 proc main() {
   var dq = new DistributedQueue(int);
 
-  for i in 1 .. 100 {
-    dq.add(i);
-  }
-  dq.freeze();
-
-  writeln(+ reduce dq);
+  counterTest(dq);
 }
