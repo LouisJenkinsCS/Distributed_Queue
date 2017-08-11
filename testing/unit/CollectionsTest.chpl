@@ -12,6 +12,9 @@ proc counterTest(c : Collection(int)) {
   }
   c.freeze();
 
+  // Test to see if it contains middle element
+  assert(c.contains((nElems / 2) : int));
+
   // Iterate over the collection.
   var actual = 0;
   for elem in c {
@@ -30,13 +33,17 @@ proc counterTest(c : Collection(int)) {
   c.unfreeze();
   concurrentActual.write(0);
   coforall loc in Locales do on loc {
+    var perLocaleActual : atomic int;
     coforall tid in 0..#here.maxTaskPar {
       var (hasElem, elt) = (true, 0);
+      var perTaskActual : int;
       while hasElem {
-        concurrentActual.add(elt);
+        perTaskActual = perTaskActual + elt;
         (hasElem, elt) = c.remove();
       }
+      perLocaleActual.add(perTaskActual);
     }
+    concurrentActual.add(perLocaleActual.read());
   }
 
   assert(c.size() == 0 && c.isEmpty());
