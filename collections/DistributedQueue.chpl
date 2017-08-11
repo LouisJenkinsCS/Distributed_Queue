@@ -246,15 +246,47 @@ class DistributedQueue : Queue {
     var localThis = getPrivatizedThis;
 
     // Fill our slots to visit in FIFO order.
-    var head = globalHead.read() % nSlots;
-    var [{0..#nSlots}] DistributedQueueSlotNode(eltType);
-    for offset in 0 .. #nSlots {
+    var head = globalHead.read();
+    var tail = globalTail.read();
 
+    // Check if empty...
+    if head >= tail {
+      return;
+    }
+
+    var nElems = tail - head;
+    var nSearchNodes = min(nElems, nSlots) : int;
+    var nodes : [{0..#nSearchNodes}] DistributedQueueSlotNode(eltType);
+    var startIdx = (head % nSlots : uint) : int;
+    for offset in 0 .. #nSearchNodes {
+      nodes[offset] = slots[(startIdx + offset) % nSlots].head.next;
+    }
+
+    var iterations = nElems;
+    var nodeIdx = 0;
+    while iterations > 0 {
+      yield nodes[nodeIdx].elt;
+      nodes[nodeIdx] = nodes[nodeIdx].next;
+      nodeIdx = (nodeIdx + 1) % nSlots;
+      iterations = iterations - 1;
     }
   }
 
   proc ~DistributedQueue() {
     var localThis = getPrivatizedThis;
     for slot in localThis.slots do delete slot;
+  }
+}
+
+proc main() {
+  var dq = new DistributedQueue(int);
+
+  for i in 1 .. 100 {
+    dq.add(i);
+  }
+  dq.freeze();
+
+  for elem in dq {
+    writeln(elem);
   }
 }

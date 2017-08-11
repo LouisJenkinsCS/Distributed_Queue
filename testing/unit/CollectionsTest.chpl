@@ -1,4 +1,5 @@
 use Collection;
+use Barrier;
 
 // Tests that all items added are returned.
 proc counterTest(c : Collection(int)) {
@@ -29,12 +30,14 @@ proc counterTest(c : Collection(int)) {
   }
   assert(concurrentActual.read() == expected);
 
-  // Empty collection
+  // Empty collection. Make sure all tasks start around same time...
   c.unfreeze();
   concurrentActual.write(0);
+  var barrier = new Barrier(here.maxTaskPar * numLocales);
   coforall loc in Locales do on loc {
     var perLocaleActual : atomic int;
     coforall tid in 0..#here.maxTaskPar {
+      barrier.barrier();
       var (hasElem, elt) = (true, 0);
       var perTaskActual : int;
       while hasElem {
