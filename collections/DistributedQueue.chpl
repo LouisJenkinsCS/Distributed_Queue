@@ -320,8 +320,17 @@ class DistributedQueue : Queue {
     return removedItem.read();
   }
 
+  proc size() : int {
+    var sz : atomic int;
+    forall slot in getPrivatizedThis.slots do sz.add(max(0, slot.size.read()));
+    return sz.read();
+  }
+
+  proc isEmpty() : bool {
+      return size() == 0;
+  }
+
   // TODO: Make Convoy Avoidant
-  // BUG: Compiler cannot seem to find 'iter these()' at all...
   proc contains(elt : eltType) : bool {
     // Frozen lookups can be done concurrently
     if isFrozen() {
@@ -388,6 +397,6 @@ class DistributedQueue : Queue {
 
 proc main() {
   var dq = new DistributedQueue(int);
-
+  
   counterTest(dq);
 }

@@ -203,6 +203,20 @@ class DistributedBoundedQueue : BoundedQueue {
       yield eltSlots[(idx % cap : uint) : int].elt;
     }
   }
+
+  iter these(param tag : iterKind) where tag = iterKind.leader {
+    if !isFrozen {
+      halt("Attempted to iterate while queue is not frozen...");
+    }
+
+    forall slot in eltSlots {
+      yield slot.elt;
+    }
+  }
+
+  iter these(param tag : iterKind, followThis) where tag = iterKind.follower {
+    yield followThis;
+  }
 }
 
 

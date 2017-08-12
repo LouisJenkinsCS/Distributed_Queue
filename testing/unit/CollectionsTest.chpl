@@ -8,6 +8,7 @@ proc counterTest(c : Collection(int)) {
 
   // Fill collection concurrently...
   c.unfreeze();
+  c.clear();
   for i in 1 .. nElems {
     c.add(i);
   }
