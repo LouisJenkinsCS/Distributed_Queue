@@ -27,23 +27,17 @@ proc counterTest(c : Collection(int)) {
   // Empty collection. Make sure all tasks start around same time...
   c.unfreeze();
   var concurrentActual : atomic int;
-  writeln("At barrier");
   var barrier = new Barrier(here.maxTaskPar * numLocales);
   coforall loc in Locales do on loc {
     var perLocaleActual : atomic int;
     const _c = c;
     coforall tid in 0..#here.maxTaskPar {
       barrier.barrier();
-      writeln(here, "~", tid, ": Left barrier");
       var (hasElem, elt) : (bool, int) = (true, 0);
       var perTaskActual : int;
       while hasElem {
-        // This shows that the value, if printed prior to usage, seems to cause an issue
-        if elt != 0 then writeln(here, "~", tid, ": Acquired elt: ", elt, ", hasElem: ", hasElem);
         perTaskActual = perTaskActual + elt;
         (hasElem, elt) = _c.remove();
-        // Note: If this is removed, we loop infinitely...
-        /*if elt != 0 then writeln(here, "~", tid, ": Acquired elt: ", elt, ", hasElem: ", hasElem);*/
       }
       perLocaleActual.add(perTaskActual);
     }

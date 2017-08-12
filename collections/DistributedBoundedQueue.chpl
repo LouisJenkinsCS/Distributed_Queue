@@ -7,6 +7,10 @@ use Benchmark;
 
 config param DistributedBoundedQueue_DoubleCheckBounds = false;
 
+const FREEZE_UNFROZEN = 0;
+const FREEZE_MARKED = 1;
+const FREEZE_FROZEN = 2;
+
 record DistributedBoundedFIFOSlot {
   type eltType;
 
@@ -79,7 +83,7 @@ class DistributedBoundedQueue : BoundedQueue {
       localThis.concurrentTasks.add(1);
 
       // Check if the queue is now 'immutable'.
-      if localThis.frozenState.read() == true {
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
         localThis.concurrentTasks.sub(1);
         return false;
       }
@@ -133,7 +137,7 @@ class DistributedBoundedQueue : BoundedQueue {
     localThis.concurrentTasks.add(1);
 
     // Check if the queue is now 'immutable'.
-    if localThis.frozenState.read() == true {
+    if localThis.frozenState.read() > FREEZE_UNFROZEN {
       localThis.concurrentTasks.sub(1);
       return (false, _defaultOf(eltType));
     }
@@ -175,19 +179,61 @@ class DistributedBoundedQueue : BoundedQueue {
     return cap;
   }
 
-  proc freeze() {
-    coforall loc in Locales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(true);
-      localThis.concurrentTasks.waitFor(0);
+  proc isFrozen() : bool {
+    var localThis = getPrivatizedThis;
+    var state = localThis.frozenState.read();
+
+    // Current transitioning state, wait it out...
+    while state == FREEZE_MARKED {
+      chpl_task_yield();
+      state = localThis.frozenState.read();
     }
+
+    return state == FREEZE_FROZEN;
   }
 
-  proc unfreeze() {
-    coforall loc in Locales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(false);
+  proc freeze() : bool {
+    var localThis = getPrivatizedThis;
+
+    // Check if already frozen
+    if localThis.frozenState.read() == FREEZE_FROZEN {
+      return true;
     }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as frozen...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_FROZEN);
+    }
+
+    return true;
+  }
+
+  proc unfreeze() : bool {
+    var localThis = getPrivatizedThis;
+
+    // Check if already unfrozen
+    if localThis.frozenState.read() == FREEZE_UNFROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as unfrozen...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_UNFROZEN);
+    }
+
+    return true;
   }
 
   inline proc isFrozen {
@@ -218,7 +264,6 @@ class DistributedBoundedQueue : BoundedQueue {
     yield followThis;
   }
 }
-
 
 proc main() {
   var plotter : Plotter(int, real);

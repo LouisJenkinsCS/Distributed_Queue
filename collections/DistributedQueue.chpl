@@ -3,6 +3,10 @@ use CollectionsTest;
 
 // TODO: Make most methods convoy avoidant (randomization and deferred processing)...
 
+const FREEZE_UNFROZEN = 0;
+const FREEZE_MARKED = 1;
+const FREEZE_FROZEN = 2;
+
 class DistributedQueueSlotNode {
   type eltType;
   var elt : eltType;
@@ -100,11 +104,13 @@ class DistributedQueue : Queue {
   var globalHead : atomic uint;
   var globalTail : atomic uint;
 
-  // To 'freeze' the queue, we must ensure that current mutating operations finish
-  // first. However, at the same time we want to reduce communication by keeping
-  // a task counter for each node that can be checked at next to no cost.
+  // Freezing the queue consists of two phases: The 'marked' phase, where the queue
+  // is marked for a state change, which prevents any new tasks for a particular state
+  // from entering, followed by a 'waiting' phase where we wait any concurrent tasks
+  // to find across all nodes (in case they did not notice the state change). This
+  // applies to state changes to frozen and unfrozen state.
   var concurrentTasks : atomic uint;
-  var frozenState : atomic bool;
+  var frozenState : atomic int;
 
   // We maintain an array of slots, wherein each slot is a pointer into a node's
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
@@ -155,7 +161,7 @@ class DistributedQueue : Queue {
       localThis.concurrentTasks.add(1);
 
       // Check if the queue is now 'immutable'.
-      if localThis.frozenState.read() == true {
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
         localThis.concurrentTasks.sub(1);
         return false;
       }
@@ -188,7 +194,7 @@ class DistributedQueue : Queue {
       localThis.concurrentTasks.add(1);
 
       // Check if the queue is now 'immutable'.
-      if localThis.frozenState.read() == true {
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
         localThis.concurrentTasks.sub(1);
         return (false, _defaultOf(eltType));
       }
@@ -196,7 +202,6 @@ class DistributedQueue : Queue {
 
     // Find a slot we can take from; if the slot is empty, we bail as it is empty.
     var head = (globalHead.fetchAdd(1) % nSlots : uint) : int;
-    writeln("head: ", globalHead.read(), ", tail: ", globalTail.read(), ", idx: ", head);
     var slot : DistributedQueueSlot(eltType);
     local { slot = localThis.slots[head]; }
     var sz = slot.size.fetchSub(1);
@@ -214,23 +219,57 @@ class DistributedQueue : Queue {
   }
 
   proc isFrozen() : bool {
-    return getPrivatizedThis.frozenState.read();
+    var localThis = getPrivatizedThis;
+    var state = localThis.frozenState.read();
+
+    // Current transitioning state, wait it out...
+    while state == FREEZE_MARKED {
+      chpl_task_yield();
+      state = localThis.frozenState.read();
+    }
+
+    return state == FREEZE_FROZEN;
   }
 
   proc freeze() : bool {
+    var localThis = getPrivatizedThis;
+
+    // Check if already frozen
+    if localThis.frozenState.read() == FREEZE_FROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
     coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(true);
+      localThis.frozenState.write(FREEZE_MARKED);
       localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as frozen...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_FROZEN);
     }
 
     return true;
   }
 
   proc unfreeze() : bool {
+    var localThis = getPrivatizedThis;
+
+    // Check if already unfrozen
+    if localThis.frozenState.read() == FREEZE_UNFROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
     coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(false);
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as unfrozen...
+    coforall loc in targetLocales do on loc {
+      localThis.frozenState.write(FREEZE_UNFROZEN);
     }
 
     return true;
@@ -397,6 +436,6 @@ class DistributedQueue : Queue {
 
 proc main() {
   var dq = new DistributedQueue(int);
-  
+
   counterTest(dq);
 }
