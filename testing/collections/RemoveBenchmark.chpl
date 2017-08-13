@@ -28,8 +28,9 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedQueue",
       plotter = plotter,
+      benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedQueue(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+        var c = new DistributedQueue(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
         return c;
       }
@@ -42,8 +43,9 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedBoundedQueue",
       plotter = plotter,
+      benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+        var c = new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
         return c;
       }
@@ -55,6 +57,7 @@ proc main() {
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "SynchronizedList",
+      benchTime = 10,
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new SynchronizedList(int);
@@ -75,6 +78,7 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedBag - Imbalanced",
       plotter = plotter,
+      benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedBag(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
@@ -94,6 +98,7 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedBag - Balanced",
       plotter = plotter,
+      benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedBag(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
         coforall loc in bmd.targetLocales do on loc {

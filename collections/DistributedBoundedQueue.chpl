@@ -1,36 +1,68 @@
 use Collection.Queue;
 use CyclicDist;
 use CollectionsTest;
+use NQueens;
 
 config param DistributedBoundedQueue_DoubleCheckBounds = false;
 
 // TODO: Make this convoy avoidant...
 
+// Freeze statuses.
 const FREEZE_UNFROZEN = 0;
 const FREEZE_MARKED = 1;
 const FREEZE_FROZEN = 2;
 
-record DistributedBoundedFIFOSlot {
+// Determines status of a slot.
+const SLOT_EMPTY = 0;
+const SLOT_FULL = 1;
+
+record DistributedBoundedQueueSlot {
   type eltType;
 
   var elt : eltType;
   var status : atomic int;
   var isEnq : atomic bool;
   var isDeq : atomic bool;
-}
 
-// Determines status of a slot.
-const SLOT_EMPTY = 0;
-const SLOT_FULL = 1;
+  proc enq(elt : eltType) {
+    on this {
+      // Another enqueuer is waiting on this cell...
+      while isEnq.testAndSet() {
+        chpl_task_yield();
+      }
+
+      status.waitFor(SLOT_EMPTY);
+      this.elt = elt;
+      status.write(SLOT_FULL);
+
+      isEnq.write(false);
+    }
+  }
+
+  proc deq() : eltType {
+    var _elt : eltType;
+
+    on this {
+      // Another dequeuer is waiting on this cell...
+      while isDeq.testAndSet() do chpl_task_yield();
+
+      status.waitFor(SLOT_FULL);
+      _elt = elt;
+      status.write(SLOT_EMPTY);
+
+      isDeq.write(false);
+    }
+
+    return _elt;
+  }
+}
 
 /*
   Bounded queue that is distributed across nodes.
 */
 class DistributedBoundedQueue : BoundedQueue {
-  var cap : int;
-
-  var targetLocDom : domain(1) = LocaleSpace;
-  var targetLocales: [targetLocDom] locale = Locales;
+  var cap;
+  var targetLocales;
 
   // Keeps track of which slot we are on...
   var globalHead : atomic uint;
@@ -46,18 +78,20 @@ class DistributedBoundedQueue : BoundedQueue {
   // per-locale data
   var eltSlotsSpace = {0..#cap};
   var eltSlotsDomain = eltSlotsSpace dmapped Cyclic(startIdx=eltSlotsSpace.low, targetLocales=targetLocales);
-  var eltSlots : [eltSlotsDomain] DistributedBoundedFIFOSlot(eltType);
+  var eltSlots : [eltSlotsDomain] DistributedBoundedQueueSlot(eltType);
 
   // Privatization id...
   var pid : int;
 
-  proc DistributedBoundedQueue(type eltType, cap = 0, targetLocDom = LocaleSpace, targetLocales = Locales) {
+  proc DistributedBoundedQueue(type eltType, cap, targetLocales = Locales) {
     if cap == 0 then halt("Cap cannot be 0!");
     pid = _newPrivatizedClass(this);
   }
 
 
-  proc DistributedBoundedQueue(other, type eltType = other.eltType, cap = other.cap, eltSlotsSpace = {0..-1}) {
+  proc DistributedBoundedQueue(other, type eltType = other.eltType, cap = 0, targetLocales=other.targetLocales) {
+    // Avoid creating array...
+    this.cap = other.cap;
   }
 
   proc dsiPrivatize(_ignored) {
@@ -65,7 +99,7 @@ class DistributedBoundedQueue : BoundedQueue {
   }
 
   proc dsiGetPrivatizeData() {
-    return eltSlots;
+    return pid;
   }
 
   inline proc getPrivatizedThis {
@@ -110,20 +144,8 @@ class DistributedBoundedQueue : BoundedQueue {
 
     var tail = _globalTail.fetchAdd(1) % localThis.cap : uint;
     ref slot = eltSlots[tail : int];
-    ref status = slot.status;
-    ref isEnq = slot.isEnq;
+    slot.enq(elt);
 
-    // Another enqueuer is waiting on this cell...
-    while isEnq.testAndSet() {
-      writeln("Waiting on another enqueuer...");
-      chpl_task_yield();
-    }
-
-    status.waitFor(SLOT_EMPTY);
-    slot.elt = elt;
-    status.write(SLOT_FULL);
-
-    isEnq.write(false);
     local { localThis.concurrentTasks.sub(1); }
     return true;
   }
@@ -159,18 +181,9 @@ class DistributedBoundedQueue : BoundedQueue {
 
     var head = globalHead.fetchAdd(1) % localThis.cap : uint;
     ref slot = eltSlots[head : int];
-    ref status = slot.status;
-    ref isDeq = slot.isDeq;
+    var elt = slot.deq();
 
-    // Another dequeuer is waiting on this cell...
-    while isDeq.testAndSet() do chpl_task_yield();
-
-    status.waitFor(SLOT_FULL);
-    var elt = slot.elt;
-    status.write(SLOT_EMPTY);
-
-    isDeq.write(false);
-    localThis.concurrentTasks.sub(1);
+    local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
   }
 
@@ -181,7 +194,7 @@ class DistributedBoundedQueue : BoundedQueue {
     // Fast-Path: Can search concurrently safely...
     if isFrozen {
       var foundElt : atomic bool;
-      forall idx in globalHead.read() .. globalTail.read() {
+      forall idx in globalHead.read() .. #globalTail.read() {
         ref slot = eltSlots[(idx % localThis.cap : uint) : int];
         if slot.status.read() == SLOT_FULL {
           if slot.elt == elt then foundElt.write(true);
@@ -193,7 +206,7 @@ class DistributedBoundedQueue : BoundedQueue {
 
     // Slow-Path: Need to do a slow sequential search. We do not do so concurrently
     // to avoid strangling concurrency in the queue, assuming lower priority.
-    for idx in globalHead.read() .. globalTail.read() {
+    for idx in globalHead.read() .. #globalTail.read() {
       ref slot = eltSlots[(idx % localThis.cap : uint) : int];
       ref isDeq = slot.isDeq;
       ref status = slot.status;
@@ -303,7 +316,7 @@ class DistributedBoundedQueue : BoundedQueue {
       halt("Attempted to iterate while queue is not frozen...");
     }
 
-    for idx in globalTail.read() .. #globalHead.read() {
+    for idx in globalHead.read() .. #globalTail.read() {
       yield eltSlots[(idx % cap : uint) : int].elt;
     }
   }
@@ -324,6 +337,16 @@ class DistributedBoundedQueue : BoundedQueue {
 }
 
 proc main() {
+  var space = {0..0};
+  var arr : [space] locale;
+  arr[0] = here;
   var dbq = new DistributedBoundedQueue(int, cap=100);
   counterTest(dbq);
+
+  var cap = 1;
+  for i in 1 .. NQueens.nQueens {
+    cap *= i;
+  }
+
+  doNQueens(new DistributedBoundedQueue(26 * int, cap=cap));
 }

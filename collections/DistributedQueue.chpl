@@ -95,8 +95,7 @@ class DistributedQueueSlot {
   An unbounded queue that is distributed across nodes.
 */
 class DistributedQueue : Queue {
-  var targetLocDom : domain(1) = LocaleSpace;
-  var targetLocales : [targetLocDom] locale = Locales;
+  var targetLocales;
 
   // Privatization id
   var pid : int;
@@ -120,7 +119,7 @@ class DistributedQueue : Queue {
   var slotSpace = {0..#nSlots};
   var slots : [slotSpace] DistributedQueueSlot(eltType);
 
-  proc DistributedQueue(type eltType, targetLocDom=LocaleSpace, targetLocales=Locales) {
+  proc DistributedQueue(type eltType, targetLocales=Locales) {
     nSlots = here.maxTaskPar * targetLocales.size;
     slotSpace = {0..#nSlots};
 
@@ -136,9 +135,7 @@ class DistributedQueue : Queue {
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedQueue(other, privData, type eltType = other.eltType) {
-    nSlots = other.nSlots;
-    slotSpace = other.slotSpace;
+  proc DistributedQueue(other, privData, type eltType = other.eltType, targetLocales=other.targetLocales) {
     slots = other.slots;
   }
 

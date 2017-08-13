@@ -1,5 +1,6 @@
 use CyclicDist;
 use Time;
+use Barrier;
 use Collection;
 
 // TODO: Test combined performance (simulate operations per second) and overall time and number of boards
@@ -138,8 +139,6 @@ proc canPlaceQueen(board, row, col) {
 
 proc doNQueens(c : Collection(26 * int)) {
   writeln("Starting...");
-  var foundDom = { 1 .. numLocales };
-  var foundDmap = foundDom dmapped Cyclic(startIdx=foundDom.low);
   var found : atomic int;
   var total : atomic uint;
 
@@ -147,10 +146,12 @@ proc doNQueens(c : Collection(26 * int)) {
   const N = nQueens;
   const totalSolutions = getTotalSolutions();
   var timer = new Timer();
+  var barrier = new Barrier(here.maxTaskPar * numLocales);
   timer.start();
 
   coforall loc in Locales do on loc {
     coforall tid in 0 .. #here.maxTaskPar {
+      barrier.barrier();
       var nSpins : uint;
       // We spin on our local index, no communication cost needed, and its not
       // a class instance field so no cost on access.

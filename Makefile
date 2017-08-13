@@ -25,7 +25,7 @@ DistributedQueue-UnitTest:
 
 DistributedBoundedQueue-UnitTest:
 	chpl collections/DistributedBoundedQueue.chpl testing/unit/CollectionsTest.chpl \
-	collections/Collection.chpl \
+	collections/Collection.chpl benchmark/NQueens.chpl \
 	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedBoundedQueue -o $(OUT)
 
 clean:
