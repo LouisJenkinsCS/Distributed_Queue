@@ -322,43 +322,6 @@ class DistributedQueue : Queue {
     }
   }
 
-  // TODO: Make convoy avoidant
-  inline proc removeItem(elt : eltType) : bool {
-    var localThis = getPrivatizedThis;
-    var removedItem : atomic bool;
-
-    for slot in localThis.slots {
-      on slot {
-        const targetElt = elt;
-        slot.headLock$ = true;
-        slot.tailLock$ = true;
-
-        var prev = slot.head;
-        var node = slot.head.next;
-        while node != nil {
-          if node.elt == targetElt {
-            prev.next = node.next;
-            if node == slot.tail then slot.tail = prev;
-            delete node;
-
-            removedItem.write(true);
-            break;
-          }
-        }
-
-        // Release...
-        slot.headLock$;
-        slot.tailLock$;
-      }
-
-      if removedItem.read() {
-        break;
-      }
-    }
-
-    return removedItem.read();
-  }
-
   proc size() : int {
     var sz : atomic int;
     forall slot in getPrivatizedThis.slots do sz.add(max(0, slot.size.read()));

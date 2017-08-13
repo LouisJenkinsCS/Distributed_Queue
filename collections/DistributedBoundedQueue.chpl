@@ -1,11 +1,10 @@
 use Collection.Queue;
 use CyclicDist;
-use Time;
-use Random;
-use Plot;
-use Benchmark;
+use CollectionsTest;
 
 config param DistributedBoundedQueue_DoubleCheckBounds = false;
+
+// TODO: Make this convoy avoidant...
 
 const FREEZE_UNFROZEN = 0;
 const FREEZE_MARKED = 1;
@@ -42,7 +41,7 @@ class DistributedBoundedQueue : BoundedQueue {
   // first. However, at the same time we want to reduce communication by keeping
   // a task counter for each node that can be checked at next to no cost.
   var concurrentTasks : atomic uint;
-  var frozenState : atomic bool;
+  var frozenState : atomic int;
 
   // per-locale data
   var eltSlotsSpace = {0..#cap};
@@ -175,6 +174,51 @@ class DistributedBoundedQueue : BoundedQueue {
     return (true, elt);
   }
 
+  // Very costly O(N) sequential search if unfrozen...
+  proc contains(elt : eltType) : bool {
+    var localThis = getPrivatizedThis;
+
+    // Fast-Path: Can search concurrently safely...
+    if isFrozen {
+      var foundElt : atomic bool;
+      forall idx in globalHead.read() .. globalTail.read() {
+        ref slot = eltSlots[(idx % localThis.cap : uint) : int];
+        if slot.status.read() == SLOT_FULL {
+          if slot.elt == elt then foundElt.write(true);
+        }
+      }
+
+      return foundElt.read();
+    }
+
+    // Slow-Path: Need to do a slow sequential search. We do not do so concurrently
+    // to avoid strangling concurrency in the queue, assuming lower priority.
+    for idx in globalHead.read() .. globalTail.read() {
+      ref slot = eltSlots[(idx % localThis.cap : uint) : int];
+      ref isDeq = slot.isDeq;
+      ref status = slot.status;
+      var foundElt : bool;
+
+      if status.read() == SLOT_FULL {
+        // Acquire dequeuer lock to ensure we can safely read without it being modified
+        while isDeq.testAndSet() do chpl_task_yield();
+
+        // Check if status changed in between...
+        if status.read() == SLOT_FULL && slot.elt == elt {
+          foundElt = true;
+        }
+
+        isDeq.write(false);
+      }
+
+      if foundElt {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   proc capacity() {
     return cap;
   }
@@ -240,6 +284,20 @@ class DistributedBoundedQueue : BoundedQueue {
     return getPrivatizedThis.frozenState.read();
   }
 
+  // To clear the data structure, we must be sure to update the counter while
+  // maintaining concurrent safety. The easiest way to do this is to just call remove.
+  proc clear() {
+    while remove()[1] do ;
+  }
+
+  proc size() : int {
+    return max(0, queueSize.read());
+  }
+
+  proc isEmpty() : bool {
+      return size() == 0;
+  }
+
   iter these() : eltType {
     if !isFrozen {
       halt("Attempted to iterate while queue is not frozen...");
@@ -250,7 +308,7 @@ class DistributedBoundedQueue : BoundedQueue {
     }
   }
 
-  iter these(param tag : iterKind) where tag = iterKind.leader {
+  iter these(param tag : iterKind) where tag == iterKind.leader {
     if !isFrozen {
       halt("Attempted to iterate while queue is not frozen...");
     }
@@ -260,39 +318,12 @@ class DistributedBoundedQueue : BoundedQueue {
     }
   }
 
-  iter these(param tag : iterKind, followThis) where tag = iterKind.follower {
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
     yield followThis;
   }
 }
 
 proc main() {
-  var plotter : Plotter(int, real);
-  var targetLocales = (1,2,4,8,16,32,64);
-  var seconds = 30 : real;
-
-  var benchFn = lambda(bd : BenchmarkData) {
-    var c = bd.userData : DistributedBoundedQueue(int);
-    for i in 1 .. bd.iterations {
-      c.add(i);
-    }
-  };
-  var deinitFn = lambda(obj : object) {
-    delete obj;
-  };
-  var initFn = lambda (bmd : BenchmarkMetaData) : object {
-    return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
-  };
-
-  runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "DistributedBoundedQueue",
-      plotter = plotter,
-      initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
-      }
-  );
-
-  plotter.plot("DistributedBoundedQueue_Performance");
+  var dbq = new DistributedBoundedQueue(int, cap=100);
+  counterTest(dbq);
 }
