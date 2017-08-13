@@ -1,3 +1,4 @@
+use CyclicDist;
 use Time;
 use Collection;
 
@@ -37,27 +38,6 @@ N x N | Total | Unique
 
 config const nQueens = 8;
 config const logBoard = 0;
-config var isFIFO = 0;
-config var isMPMC = 0;
-config var isSync = 0;
-config var isCCSynch = 0;
-config var isList = 0;
-
-inline proc getQueue(type eltType) : Queue(eltType) {
-  if isFIFO {
-    return new DistributedFIFOQueue(eltType);
-  } else if isMPMC {
-    return new DistributedQueue(eltType);
-  } else if isSync {
-    return new SyncQueue(eltType);
-  } else if isCCSynch {
-    return new CCQueue(eltType);
-  } else if isList {
-    return new SyncList(eltType);
-  } else {
-    halt("Requires one of the flags to be set: '--isFIFO', '--isMPMC', '--isSync', '--isList', or '--isCCSynch'");
-  }
-}
 
 inline proc getTotalSolutions() {
   var retval = 0;
@@ -156,15 +136,14 @@ proc canPlaceQueen(board, row, col) {
   return true;
 }
 
-proc main() {
+proc doNQueens(c : Collection(26 * int)) {
   writeln("Starting...");
   var foundDom = { 1 .. numLocales };
   var foundDmap = foundDom dmapped Cyclic(startIdx=foundDom.low);
   var found : atomic int;
   var total : atomic uint;
 
-  var boardQueue : Queue(26 * int) = getQueue(26 * int);
-  boardQueue.enqueue(_defaultOf(boardQueue.eltType));
+  c.add(_defaultOf(c.eltType));
   const N = nQueens;
   const totalSolutions = getTotalSolutions();
   var timer = new Timer();
@@ -176,12 +155,12 @@ proc main() {
       // We spin on our local index, no communication cost needed, and its not
       // a class instance field so no cost on access.
       while found.read() < totalSolutions {
-        var (exists, myBoard) = boardQueue.dequeue();
+        var (exists, myBoard) = c.remove();
         // Spin: We haven't found solution yet...
         if !exists {
           nSpins = nSpins + 1;
           if nSpins == 10000000000 {
-            (boardQueue : DistributedQueue(26 * int)).logWorkStealing = true;
+            halt("Spun: ", nSpins);
           }
           writeln(here, " Found: ", found.read(), ", Spins: ", nSpins);
           continue;
@@ -200,7 +179,7 @@ proc main() {
           if canPlaceQueen(myBoard, firstEmptyRow, j) {
             var newBoard = myBoard;
             newBoard[firstEmptyRow] = j;
-            boardQueue.enqueue(newBoard);
+            c.add(newBoard);
           }
         }
       }

@@ -1,5 +1,6 @@
 use Collection.Queue;
 use CollectionsTest;
+use NQueens;
 
 // TODO: Make most methods convoy avoidant (randomization and deferred processing)...
 
@@ -401,4 +402,6 @@ proc main() {
   var dq = new DistributedQueue(int);
 
   counterTest(dq);
+  doNQueens(new DistributedQueue(26 * int));
+  writeln("Done tests...");
 }

@@ -18,5 +18,15 @@ CollectionRemove-Benchmark:
 	misc/LocalAtomicObject.chpl misc/GlobalAtomicObject.chpl \
 	$(CHPLFLAGS) $(EXTRAFLAGS) --main-module RemoveBenchmark -o $(OUT)
 
+DistributedQueue-UnitTest:
+	chpl collections/DistributedQueue.chpl testing/unit/CollectionsTest.chpl \
+	collections/Collection.chpl benchmark/NQueens.chpl \
+	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedQueue -o $(OUT)
+
+DistributedBoundedQueue-UnitTest:
+	chpl collections/DistributedBoundedQueue.chpl testing/unit/CollectionsTest.chpl \
+	collections/Collection.chpl \
+	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedBoundedQueue -o $(OUT)
+
 clean:
 	rm $(OUT) $(OUT)_real

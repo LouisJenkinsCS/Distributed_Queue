@@ -726,8 +726,7 @@ class DistributedBag : Collection {
   }
 
   proc add(elt : eltType) : bool {
-    localBag.add(elt);
-    return true;
+    return localBag.add(elt);
   }
 
   proc remove() : (bool, eltType) {
