@@ -14,6 +14,9 @@ proc counterTest(c : Collection(int)) {
   }
   c.freeze();
 
+  writeln(c.size());
+  assert(c.size() == nElems);
+
   // Test to see if it contains middle element
   assert(c.contains((nElems / 2) : int));
   writeln("Contains: Passed");
@@ -25,6 +28,7 @@ proc counterTest(c : Collection(int)) {
   }
   assert(actual == expected);
   writeln("Iteration: Passed");
+  writeln(c.size());
 
   // Empty collection. Make sure all tasks start around same time...
   c.unfreeze();
@@ -46,6 +50,8 @@ proc counterTest(c : Collection(int)) {
     concurrentActual.add(perLocaleActual.read());
   }
 
+  writeln("size: ", c.size());
+  writeln("concurrentActual: ", concurrentActual.read(), ", expected: ", expected);
   assert(concurrentActual.read() == expected);
   assert(c.size() == 0 && c.isEmpty());
   writeln("Drain: Passed");

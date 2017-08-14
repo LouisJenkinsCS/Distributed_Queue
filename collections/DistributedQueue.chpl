@@ -24,10 +24,6 @@ class DistributedQueueSlot {
   var headLock$ : sync bool;
   var tailLock$ : sync bool;
 
-  // Number of elements in this slot. If the count is negative, that means a 'dequeue'
-  // has skipped over this, and as 'enqueue' we should as well to catch up.
-  var size : atomic int;
-
   var head : DistributedQueueSlotNode(eltType);
   var tail : DistributedQueueSlotNode(eltType);
 
@@ -95,6 +91,7 @@ class DistributedQueueSlot {
   An unbounded queue that is distributed across nodes.
 */
 class DistributedQueue : Queue {
+  var cap;
   var targetLocales;
 
   // Privatization id
@@ -103,6 +100,7 @@ class DistributedQueue : Queue {
   // Keeps track of which slot we are on...
   var globalHead : atomic uint;
   var globalTail : atomic uint;
+  var queueSize : atomic int;
 
   // Freezing the queue consists of two phases: The 'marked' phase, where the queue
   // is marked for a state change, which prevents any new tasks for a particular state
@@ -119,7 +117,7 @@ class DistributedQueue : Queue {
   var slotSpace = {0..#nSlots};
   var slots : [slotSpace] DistributedQueueSlot(eltType);
 
-  proc DistributedQueue(type eltType, targetLocales=Locales) {
+  proc DistributedQueue(type eltType, cap=-1, targetLocales=Locales) {
     nSlots = here.maxTaskPar * targetLocales.size;
     slotSpace = {0..#nSlots};
 
@@ -135,7 +133,7 @@ class DistributedQueue : Queue {
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedQueue(other, privData, type eltType = other.eltType, targetLocales=other.targetLocales) {
+  proc DistributedQueue(other, privData, type eltType = other.eltType, cap=other.cap, targetLocales=other.targetLocales) {
     slots = other.slots;
   }
 
@@ -153,8 +151,8 @@ class DistributedQueue : Queue {
 
   proc add(elt : eltType) : bool {
     var localThis = getPrivatizedThis;
-    ref _globalTail = globalTail;
 
+    // Enter freeze barrier...
     local {
       localThis.concurrentTasks.add(1);
 
@@ -165,29 +163,75 @@ class DistributedQueue : Queue {
       }
     }
 
-    var _nSlots : int;
-    local { _nSlots = localThis.nSlots; }
+    // If we have a capacity of 0, then we can't really add anything anyway.
+    if localThis.cap == 0 {
+      local { localThis.concurrentTasks.sub(1); }
+      return false;
+    }
 
-    // Find a slot we can add to; skip over any with a negative size
-    while true {
-      var tail = (_globalTail.fetchAdd(1) % _nSlots : uint) : int;
-      var slot : DistributedQueueSlot(eltType);
-      local { slot = localThis.slots[tail]; }
-      var sz = slot.size.fetchAdd(1);
+    // If we have a capacity, we must ensure that there is enough space for our
+    // operation ahead of time. We take a wait-free approach by performing a
+    // fetch-add on the queue size. If there is space, then we succeed within one
+    // communication round-trip. If we fail, then we make attempts to fix the queue
+    // size in a lock-free manner (for as long as it is over capacity). It should be
+    // noted that if we see that the queue size is negative, meaning a dequeue operation
+    // has over committed, we consequentially help them as well during the fetch-add loop.
+    if localThis.cap > 0 {
+      while true {
+        var size = queueSize.fetchAdd(1);
 
-      if sz >= 0 {
-        slot.add(elt);
-        local { localThis.concurrentTasks.sub(1); }
-        return true;
+        // Over capacity, fix before returning...
+        if size >= localThis.cap {
+          on this {
+            var readSize = queueSize.read();
+            // Attempt to fix, but yield to reduce potential contention and CPU hogging.
+            while readSize > this.cap && queueSize.compareExchangeWeak(readSize, this.cap) {
+              chpl_task_yield();
+              readSize = queueSize.read();
+            }
+          }
+
+          // Fixed, return early...
+          local { localThis.concurrentTasks.sub(1); }
+          return false;
+        }
+        // At this point, we either have a capacity and something between [0, cap],
+        // or we do not have a capacity and we have something greater than 0,
+        // either of which means we are safe.
+        else if size >= 0 {
+          break;
+        }
+        // If the size is negative, a dequeuer has overcommitted. Since there can
+        // be an element for us, we loop again.
+      }
+    }
+    // If we have a 'negative' capacity, we do not have one and can hold an
+    // infinite amount; this gives us a more optimized code path.
+    else {
+      while true {
+        var size = queueSize.fetchAdd(1);
+
+        // We have reserved a spot for our operation.
+        if size >= 0 {
+          break;
+        }
+        // If the size is negative, a dequeuer has overcommitted. Since there can
+        // be an element for us, we loop again.
       }
     }
 
-    halt("Somehow broke out of add loop...");
+    // At this point, we know we have a space for us. We find our slot based on another
+    // fetch-add counter, making this wait-free as well.
+    var tail = (globalTail.fetchAdd(1) % localThis.nSlots : uint) : int;
+    localThis.slots[tail].add(elt);
+    local { localThis.concurrentTasks.sub(1); }
+    return true;
   }
 
   proc remove() : (bool, eltType) {
     var localThis = getPrivatizedThis;
 
+    // Enter freeze barrier...
     local {
       localThis.concurrentTasks.add(1);
 
@@ -198,20 +242,49 @@ class DistributedQueue : Queue {
       }
     }
 
-    // Find a slot we can take from; if the slot is empty, we bail as it is empty.
-    var head = (globalHead.fetchAdd(1) % nSlots : uint) : int;
-    var slot : DistributedQueueSlot(eltType);
-    local { slot = localThis.slots[head]; }
-    var sz = slot.size.fetchSub(1);
-
-    // Nothing for us...
-    if sz < 1 {
+    // If we have a capacity of 0, then we can't really remove anything anyway.
+    if localThis.cap == 0 {
       local { localThis.concurrentTasks.sub(1); }
       return (false, _defaultOf(eltType));
     }
 
-    // There is something for us
-    var elt = slot.remove();
+    // Similar to enqueue, we use a wait-free method for updating the queue size,
+    // using fetch-sub instead. Like enqueue, we make attempts to fix the queue
+    // size in a lock-free manner (for as long as it is negative). It should be
+    // noted that if we see that the queue size is over capacity, meaning an
+    // enqueue operation has over committed, we consequentially help them as well
+    // during the fetch-sub loop.
+    while true {
+      var size = queueSize.fetchSub(1);
+
+      // Negative, fix before returning...
+      if size <= 0 {
+        on this {
+          var readSize = queueSize.read();
+          // Attempt to fix, but yield to reduce potential contention and CPU hogging.
+          while readSize < 0 && queueSize.compareExchangeWeak(readSize, 0) {
+            chpl_task_yield();
+            readSize = queueSize.read();
+          }
+        }
+
+        // Fixed, return early...
+        local { localThis.concurrentTasks.sub(1); }
+        return (false, _defaultOf(eltType));
+      }
+      // If we have a cap, then at this point, we have something between [0, cap],
+      // if we do not have a cap then there is no need to 'fix' the queue size;
+      // in both cases we are safe.
+      else if localThis.cap < 0 || size <= localThis.cap {
+        break;
+      }
+      // If the size is over capacity, a enqueuer has overcommitted. Since there can
+      // be an element for us, we loop again.
+    }
+
+    // Find a slot we can take from; if the slot is empty, we bail as it is empty.
+    var head = (globalHead.fetchAdd(1) % localThis.nSlots : uint) : int;
+    var elt = localThis.slots[head].remove();
     local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
   }
@@ -321,9 +394,7 @@ class DistributedQueue : Queue {
   }
 
   proc size() : int {
-    var sz : atomic int;
-    forall slot in getPrivatizedThis.slots do sz.add(max(0, slot.size.read()));
-    return sz.read();
+    return queueSize.read();
   }
 
   proc isEmpty() : bool {
