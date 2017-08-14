@@ -27,10 +27,10 @@ proc main() {
       benchTime = 10,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedBoundedQueue",
+      benchName = "DistributedQueue - Bounded",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedBoundedQueue(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
+        return new DistributedQueue(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
       }
   );
 

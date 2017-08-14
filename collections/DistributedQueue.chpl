@@ -4,9 +4,13 @@ use NQueens;
 
 // TODO: Make most methods convoy avoidant (randomization and deferred processing)...
 
-const FREEZE_UNFROZEN = 0;
-const FREEZE_MARKED = 1;
-const FREEZE_FROZEN = 2;
+/*
+  Frozen states... If we are FREEZE_UNFROZEN, we are mutable. If we are FREEZE_FROZEN,
+  we are immutable. If we are FREEZE_MARKED, we are in the middle of a state change.
+*/
+private const FREEZE_UNFROZEN = 0;
+private const FREEZE_MARKED = 1;
+private const FREEZE_FROZEN = 2;
 
 class DistributedQueueSlotNode {
   type eltType;
@@ -289,6 +293,14 @@ class DistributedQueue : Queue {
     return (true, elt);
   }
 
+  proc enqueue(elt : eltType) : bool {
+    return add(elt);
+  }
+
+  proc dequeue() : (bool, eltType) {
+    return remove();
+  }
+
   proc isFrozen() : bool {
     var localThis = getPrivatizedThis;
     var state = localThis.frozenState.read();
@@ -352,47 +364,6 @@ class DistributedQueue : Queue {
     while remove()[1] do ;
   }
 
-  /*
-    Iterate in FIFO order.
-
-    TODO: Once the issue of serial iteration leaking state is fixed, a simple
-    one-way channel implementation may prove very useful here to get an item
-    in a round-robin manner.
-  */
-  iter these() : eltType {
-    if !isFrozen() {
-      halt("Iteration only supported while frozen...");
-    }
-
-    var localThis = getPrivatizedThis;
-
-    // Fill our slots to visit in FIFO order.
-    var head = globalHead.read();
-    var tail = globalTail.read();
-
-    // Check if empty...
-    if head >= tail {
-      return;
-    }
-
-    var nElems = tail - head;
-    var nSearchNodes = min(nElems, nSlots) : int;
-    var nodes : [{0..#nSearchNodes}] DistributedQueueSlotNode(eltType);
-    var startIdx = (head % nSlots : uint) : int;
-    for offset in 0 .. #nSearchNodes {
-      nodes[offset] = slots[(startIdx + offset) % nSlots].head.next;
-    }
-
-    var iterations = nElems;
-    var nodeIdx = 0;
-    while iterations > 0 {
-      yield nodes[nodeIdx].elt;
-      nodes[nodeIdx] = nodes[nodeIdx].next;
-      nodeIdx = (nodeIdx + 1) % nSlots;
-      iterations = iterations - 1;
-    }
-  }
-
   proc size() : int {
     return queueSize.read();
   }
@@ -443,6 +414,47 @@ class DistributedQueue : Queue {
     }
 
     return foundItem.read();
+  }
+
+  /*
+    Iterate in FIFO order.
+
+    TODO: Once the issue of serial iteration leaking state is fixed, a simple
+    one-way channel implementation may prove very useful here to get an item
+    in a round-robin manner.
+  */
+  iter these() : eltType {
+    if !isFrozen() {
+      halt("Iteration only supported while frozen...");
+    }
+
+    var localThis = getPrivatizedThis;
+
+    // Fill our slots to visit in FIFO order.
+    var head = globalHead.read();
+    var tail = globalTail.read();
+
+    // Check if empty...
+    if head >= tail {
+      return;
+    }
+
+    var nElems = tail - head;
+    var nSearchNodes = min(nElems, nSlots) : int;
+    var nodes : [{0..#nSearchNodes}] DistributedQueueSlotNode(eltType);
+    var startIdx = (head % nSlots : uint) : int;
+    for offset in 0 .. #nSearchNodes {
+      nodes[offset] = slots[(startIdx + offset) % nSlots].head.next;
+    }
+
+    var iterations = nElems;
+    var nodeIdx = 0;
+    while iterations > 0 {
+      yield nodes[nodeIdx].elt;
+      nodes[nodeIdx] = nodes[nodeIdx].next;
+      nodeIdx = (nodeIdx + 1) % nSlots;
+      iterations = iterations - 1;
+    }
   }
 
   iter these(param tag : iterKind) where tag == iterKind.leader {

@@ -6,7 +6,7 @@ class SynchronizedListNode {
   var next : SynchronizedListNode(eltType);
 }
 
-class SynchronizedList : List {
+class SynchronizedList : Collection {
   var head : SynchronizedListNode(eltType);
   var tail : SynchronizedListNode(eltType);
   var lock$ : sync bool;

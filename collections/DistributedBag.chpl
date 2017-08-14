@@ -1,72 +1,74 @@
 use Collection;
-use BigInteger;
-use Time;
 use BlockDist;
 
 /*
-  A highly parallel segmented multiset. Each node gets its own queue, and in each queue
-  its segmented into 'here.maxTaskPar' segments. Segments allow for actual parallelism
+  A highly parallel segmented multiset. Each node gets its own bag, and in each bag
+  it is segmented into 'here.maxTaskPar' segments. Segments allow for actual parallelism
   while operating on the queue in that it enables us to manage 'best-case', 'average-case',
   and 'worst-case' scenarios by making multiple passes over each segment. Examples
   of 'best-case' scenarios would be when a segment is unlocked. 'average-case' would be
-  when any unlocked/locked segment, and so on.
+  when any unlocked/locked segment, and so on. This ensures that if any segment is
+  not contested, it is the first to be chosen over one that already is.
 
-  This queue employs work stealing, where after multiple failed passes over the
-  segments in the queue we attempt to steal work from other queues. Work stealing
-  employs a nice helper algorithm where any task performing dequeue operations,
-  after also making multiple failed consecutive passes over the queue,
-  will enlist their help in terms of finding elements from other nodes.
-
-  TODO/BUG: Global work stealing is non-deterministic in terms of whether or not
-  the queue is empty. If we process a node and they steal from another node ahead
-  of us, then we skip over it as if the queue is empty when it really isn't. Its
-  possible a rather large amount has been stolen as well, which makes this extremely
-  problematic. Requires a better global synchronization scheme, definitely need
-  the employment for GlobalAtomicObject.
-
-  TODO: Switch from Tuples to raw C pointers and double the size of each successor
-  segment (potential performance boost, faster compilation time).
+  This data structure employs its own load balancing, employing both a best-effort
+  round-robin algorithm for load distribution of local segments, and employing a
+  work-stealing algorithm for evening load distribution across nodes. The round-robin
+  reduces contention inherent from beginning at a single segment and aid in local
+  load distribution. The work-stealing algorithm steals horizontally across nodes,
+  in that segments steal from other segments that share the same index on another node,
+  ensuring both global and local load distribution.
 */
 
 /*
   Below are segment statuses, which is a way to make visible to outsiders the
   current ongoing operation.
 */
-// Free to contest
-const UNLOCKED : uint = 0;
-// These are normal operations which are for more-verbose debugging purposes.
-const ENQUEUE : uint = 1;
-const DEQUEUE : uint = 2;
-// The work stealer is initializing fields for work stealing, and will be ready soon.
-const STEALING_INIT : uint = 3;
-// The work stealer is currently stealing work, and may require assistance.
-const STEALING_WORK : uint = 4;
-// The work stealer is currently merging work that is stolen, and no longer requires assistance.
-const STEALING_MERGE : uint = 5;
+private const STATUS_UNLOCKED : uint = 0;
+private const STATUS_ADD : uint = 1;
+private const STATUS_REMOVE : uint = 2;
 
 /*
-  Below are statuses specific work queue segment slots.
+  Below are statuses specific to the work stealing algorithm.
 */
-// The work stealer has reinitialized the slot for use.
-const INITIALIZED : int = -1;
-// A helper task has finished but has not found any work...
-const FINISHED_WITH_NO_WORK : int = 0;
-// A helper task has finished with work.
-const FINISHED_WITH_WORK : int = 1;
+private const WS_INITIALIZED : int = -1;
+private const WS_FINISHED_WITH_NO_WORK : int = 0;
+private const WS_FINISHED_WITH_WORK : int = 1;
 
+/*
+  Frozen states... If we are FREEZE_UNFROZEN, we are mutable. If we are FREEZE_FROZEN,
+  we are immutable. If we are FREEZE_MARKED, we are in the middle of a state change.
+*/
+private const FREEZE_UNFROZEN = 0;
+private const FREEZE_MARKED = 1;
+private const FREEZE_FROZEN = 2;
 
-// The amount of elements per unroll block; defines the tuple size.
+/*
+  The phases for operations.
+*/
+private const ADD_BEST_CASE = 0;
+private const ADD_AVERAGE_CASE = 1;
+private const REMOVE_BEST_CASE = 2;
+private const REMOVE_AVERAGE_CASE = 3;
+private const REMOVE_WORST_CASE = 4;
+
+// The initial amount of elements in an unroll block.
 config param INITIAL_BLOCK_SIZE = 1024;
 // The amount we attempt to steal from each segment of other nodes. Helps to
 // further ensure a proper load balance by not leaving segments empty by stealing
 // on average 1/4 of their work, leaving them with 3/4. As we steal from *all* other
 // segments, it is imperative that this stays low to prevent a ping-pong effect on
-// work propagating from excessive work stealing. We steal at least one element, but
-// no more than ELEMS_PER_BLOCK per segment.
+// work propagating from excessive work stealing. We steal at least one element,
+// but no more than the amount of data that can be transferred within a single
+// bulk transfer, measured in megabytes.
 config param WORK_STEALING_RATIO = 0.25;
 config param WORK_STEALING_MAX_MEMORY_MB : real = 1.0;
-config param logMPMCQueue = false;
 
+/*
+  A segment block is an unrolled linked list node that holds a contiguous buffer
+  of memory. Each segment block *should* be a power of two, as we increase the
+  size of each subsequent unroll block by twice the size. This is so that stealing
+  work is faster in that majority of elements are confined to one area.
+*/
 class BagSegmentBlock {
   type eltType;
 
@@ -115,16 +117,6 @@ class BagSegmentBlock {
     return elt;
   }
 
-  iter drain(n) {
-    for 1 .. n {
-      if isEmpty {
-        return;
-      }
-
-      yield pop();
-    }
-  }
-
   proc BagSegmentBlock(type eltType, capacity) {
     if capacity == 0 {
       halt("Capacity is 0...");
@@ -145,15 +137,14 @@ class BagSegmentBlock {
   }
 }
 
-record BagSegmentSlot {
-  type eltType;
-
-  var status : atomic int;
-}
-
+/*
+  A segment is, in and of itself an unrolled linked list. We maintain one per core
+  to ensure maximum parallelism.
+*/
 record BagSegment {
   type eltType;
 
+  // Used as a test-and-test-and-set spinlock.
   var status : atomic uint;
 
   var headBlock : BagSegmentBlock(eltType);
@@ -323,14 +314,18 @@ record BagSegment {
     nElems.add(1);
   }
 
-  // TODO: Improve efficiency of bulk adding...
   inline proc addElements(elts) {
     for elt in elts do addElements(elt);
   }
 }
 
+/*
+  We maintain a multiset 'bag' per node. Each bag keeps a handle to it's parent,
+  so it is advised for the user to use a bag directly, as it is also a Collection
+  in and of itself, as this avoids any communication inherent in accessing class fields.
+*/
 class Bag : Collection {
-  // A handle to our parent 'distributed' work queue, which is needed for work stealing.
+  // A handle to our parent 'distributed' bag, which is needed for work stealing.
   var parentHandle : DistributedBag(eltType);
 
   /*
@@ -347,13 +342,12 @@ class Bag : Collection {
     found enough items, then it may attempt to balance the load distribution.
   */
   var loadBalanceInProgress : atomic bool;
-  var isBagEmpty : bool;
 
-  // To 'freeze' the bag, we must ensure that current mutating operations finish
+  // To 'freeze' the bag, we must ensure that concurrent mutating operations finish
   // first. However, at the same time we want to reduce communication by keeping
   // a task counter for each node that can be checked at next to no cost.
   var concurrentTasks : atomic uint;
-  var frozenState : atomic bool;
+  var frozenState : atomic int;
 
   var maxParallelSegmentSpace = {0 .. #here.maxTaskPar};
   var segments : [maxParallelSegmentSpace] BagSegment(eltType);
@@ -367,18 +361,47 @@ class Bag : Collection {
   }
 
   proc freeze() {
-    coforall loc in Locales do on loc {
+    // Check if already frozen
+    if frozenState.read() == FREEZE_FROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(true);
+      localBag.frozenState.write(FREEZE_MARKED);
       localBag.concurrentTasks.waitFor(0);
     }
+
+    // Mark as frozen...
+    coforall loc in targetLocales do on loc {
+      var localBag = parentHandle.getPrivatizedThis.bag;
+      localBag.frozenState.write(FREEZE_FROZEN);
+    }
+
+    return true;
   }
 
   proc unfreeze() {
+    // Check if already unfrozen
+    if frozenState.read() == FREEZE_UNFROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      var localBag = parentHandle.getPrivatizedThis.bag;
+      localBag.frozenState.write(FREEZE_MARKED);
+      localBag.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as unfrozen...
     coforall loc in Locales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(false);
+      localBag.frozenState.write(FREEZE_UNFROZEN);
     }
+
+    return true;
   }
 
   inline proc isFrozen {
@@ -386,73 +409,62 @@ class Bag : Collection {
   }
 
   proc Bag(type eltType, parentHandle) {
-    parentHandle.bag = this;
+    this.parentHandle = parentHandle;
   }
 
   proc add(elt : eltType) : bool {
-    var startIdx = nextStartIdxEnq;
-    var idx = startIdx : int;
-    var iterations = 0;
+    var startIdx = nextStartIdxEnq : int;
+    var phase = ADD_BEST_CASE;
 
-    /*
-      Pass 1: Best Case
-
-      Find a segment that is unlocked and attempt to acquire it. As we are adding
-      elements, we don't care how many elements there are, just that we find
-      some place to add ours.
-    */
-    while iterations < here.maxTaskPar {
-      ref segment = segments[idx];
-
-      // Attempt to acquire...
-      if segment.acquireWithStatus(ENQUEUE) {
-        segment.addElements(elt);
-        segment.releaseStatus();
-        return true;
-      }
-
-      iterations = iterations + 1;
-      idx = (idx + 1) % here.maxTaskPar;
-    }
-
-    iterations = 0;
-    idx = startIdx : int;
-
-    /*
-      Pass 2: Average Case
-
-      Find any segment (locked or unlocked) and make an attempt to acquire it.
-      If the segment is actively 'work stealing' then we skip over it to minimize
-      the excessive wait-time; given that there can be only *one* work-stealer
-      for a node, we know we'll find a better one nearby.
-    */
     while true {
-      ref segment = segments[idx];
+      select phase {
+        /*
+          Pass 1: Best Case
 
-      while true {
-        select segment.currentStatus {
-          // Quick acquire...
-          when UNLOCKED do {
+          Find a segment that is unlocked and attempt to acquire it. As we are adding
+          elements, we don't care how many elements there are, just that we find
+          some place to add ours.
+        */
+        when ADD_BEST_CASE {
+          for offset in 0 .. #here.maxTaskPar {
+            ref segment = segments[(startIdx + offset) % here.maxTaskPar];
+
+            // Attempt to acquire...
             if segment.acquireWithStatus(ENQUEUE) {
               segment.addElements(elt);
               segment.releaseStatus();
               return true;
             }
           }
-          // If someone is stealing, then that means that we'd be waiting for a while
-          // anyway, so we may as well attempt to find a node with a shorter wait time.
-          when STEALING_INIT do break;
-          when STEALING_WORK do break;
-          when STEALING_MERGE do break;
+
+          phase = ADD_AVERAGE_CASE;
         }
+        /*
+          Pass 2: Average Case
 
-        chpl_task_yield();
+          Find any segment (locked or unlocked) and make an attempt to acquire it.
+        */
+        when ADD_AVERAGE_CASE {
+          ref segment = segments[startIdx];
+
+          while true {
+            select segment.currentStatus {
+              // Quick acquire...
+              when UNLOCKED do {
+                if segment.acquireWithStatus(ENQUEUE) {
+                  segment.addElements(elt);
+                  segment.releaseStatus();
+                  return true;
+                }
+              }
+            }
+            chpl_task_yield();
+          }
+        }
       }
-
-      idx = (idx + 1) % here.maxTaskPar;
     }
 
-    halt("Almost exited enqueueAcquire before getting a segment...");
+    halt("DEADCODE");
   }
 
   record StolenWork {
@@ -465,7 +477,7 @@ class Bag : Collection {
     var startIdx = nextStartIdxDeq;
     var idx = startIdx;
     var iterations = 0;
-    var phase = 1;
+    var phase = REMOVE_BEST_CASE;
     var backoff = 0;
 
     while true {
@@ -477,7 +489,7 @@ class Bag : Collection {
           extremely helpful in the case where we have a good distribution of elements
           in each segment.
         */
-        when 1 {
+        when REMOVE_BEST_CASE {
           while iterations < here.maxTaskPar {
             ref segment = segments[idx];
 
@@ -495,7 +507,7 @@ class Bag : Collection {
             idx = (idx + 1) % here.maxTaskPar;
           }
 
-          phase = phase + 1;
+          phase = REMOVE_AVERAGE_CASE;
         }
 
         /*
@@ -505,7 +517,7 @@ class Bag : Collection {
           or unlocked this time, just that it contains elements; this handles majority
           of cases where we have elements anywhere in any segment.
         */
-        when 2 {
+        when REMOVE_AVERAGE_CASE {
           while iterations < here.maxTaskPar {
             ref segment = segments[idx];
 
@@ -528,7 +540,7 @@ class Bag : Collection {
             idx = (idx + 1) % here.maxTaskPar;
           }
 
-          phase = phase + 1;
+          phase = REMOVE_WORST_CASE;
         }
 
         /*
@@ -542,7 +554,7 @@ class Bag : Collection {
           Furthermore, in this phase we loop indefinitely until we are 100% certain it is
           empty or we get an item, so introduce some backoff here.
         */
-        when 3 {
+        when REMOVE_WORST_CASE {
           while true {
             ref segment = segments[idx];
 
@@ -564,12 +576,9 @@ class Bag : Collection {
                   if loadBalanceInProgress.testAndSet() {
                     segment.releaseStatus();
                     if logMPMCQueue then writeln(here, ": loadBalance is in progres... Looking for work...");
-                    /*while loadBalanceInProgress.read() do chpl_task_yield();
-                    if isBagEmpty then return (false, _defaultOf(eltType));
-                    if logMPMCQueue then writeln(here, ": loadBalance is finished, continuing...");*/
 
                     // Reset our phase and scan for more elements...
-                    phase = 1;
+                    phase = REMOVE_BEST_CASE;
                     break;
                   }
 
@@ -654,7 +663,6 @@ class Bag : Collection {
                     recvSegment.releaseStatus();
                   }
 
-                  isBagEmpty = isEmpty.read();
                   loadBalanceInProgress.write(false);
 
                   // At this point, if no work has been found, we will return empty...
@@ -662,7 +670,7 @@ class Bag : Collection {
                     return (false, _defaultOf(eltType));
                   } else {
                     // Otherwise, we try to get data like everyone else.
-                    phase = 1;
+                    phase = REMOVE_BEST_CASE;
                     break;
                   }
                 }
@@ -685,28 +693,25 @@ class Bag : Collection {
       backoff = 0;
     }
 
-    halt("DistributedBag.remove() DEADCODE...");
+    halt("DEADCODE");
   }
 }
 
 
 class DistributedBag : Collection {
-  var targetLocDom : domain(1) = LocaleSpace;
-  var targetLocales: [targetLocDom] locale = Locales;
+  var targetLocales;
   var pid : int;
 
   // Node-local fields
   var bag : Bag(eltType);
 
-  proc DistributedBag(type eltType, targetLocDom = LocaleSpace, targetLocales = Locales) {
+  proc DistributedBag(type eltType, targetLocales = Locales) {
     bag = new Bag(eltType, this);
-    bag.parentHandle = this;
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedBag(other, privData, type eltType = other.eltType, targetLocales = other.targetLocales, targetLocDom = other.targetLocDom) {
+  proc DistributedBag(other, privData, type eltType = other.eltType, targetLocales = other.targetLocales) {
     bag = new Bag(eltType, this);
-    bag.parentHandle = this;
   }
 
   proc dsiPrivatize(privData) {
