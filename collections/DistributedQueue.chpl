@@ -3,6 +3,8 @@ use CollectionsTest;
 use NQueens;
 
 // TODO: Make most methods convoy avoidant (randomization and deferred processing)...
+// TODO: Convert into a Deque; we perform bounds checking at the door, so head and tail
+// are guaranteed to not switch sides.
 
 /*
   Frozen states... If we are FREEZE_UNFROZEN, we are mutable. If we are FREEZE_FROZEN,
@@ -299,6 +301,10 @@ class DistributedQueue : Queue {
 
   proc dequeue() : (bool, eltType) {
     return remove();
+  }
+
+  proc canFreeze() : bool {
+    return true;
   }
 
   proc isFrozen() : bool {

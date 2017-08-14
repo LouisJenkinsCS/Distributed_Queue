@@ -26,6 +26,7 @@ use BlockDist;
 private const STATUS_UNLOCKED : uint = 0;
 private const STATUS_ADD : uint = 1;
 private const STATUS_REMOVE : uint = 2;
+private const STATUS_LOOKUP : uint = 3;
 
 /*
   Below are statuses specific to the work stealing algorithm.
@@ -404,8 +405,20 @@ class Bag : Collection {
     return true;
   }
 
-  inline proc isFrozen {
-    return frozenState.read();
+  proc canFreeze() : bool {
+    return true;
+  }
+
+  proc isFrozen() : bool {
+    var state = frozenState.read();
+
+    // Current transitioning state, wait it out...
+    while state == FREEZE_MARKED {
+      chpl_task_yield();
+      state = frozenState.read();
+    }
+
+    return state == FREEZE_FROZEN;
   }
 
   proc Bag(type eltType, parentHandle) {
@@ -465,12 +478,6 @@ class Bag : Collection {
     }
 
     halt("DEADCODE");
-  }
-
-  record StolenWork {
-    type eltType;
-    var dom : domain(1);
-    var arr : [dom] eltType;
   }
 
   proc remove() : (bool, eltType) {
@@ -695,6 +702,29 @@ class Bag : Collection {
 
     halt("DEADCODE");
   }
+
+  // TODO: This is a lazy implementation that is not only slow, but it thrashes
+  // the entire data structure. After initial PR, if there is time, I'll come back
+  // to make this more efficient... it would be magnitudes faster, but no time currently.
+  proc clear() {
+    while remove()[1] do ;
+  }
+
+  proc size() : int {
+    return parentHandle.size();
+  }
+
+  proc isEmpty() : bool {
+    return parentHandle.isEmpty();
+  }
+
+  proc contains(elt : eltType) : bool {
+    return parentHandle.contains(elt);
+  }
+
+  iter these() : eltType {
+    return parentHandle.these;
+  }
 }
 
 
@@ -736,5 +766,108 @@ class DistributedBag : Collection {
 
   proc remove() : (bool, eltType) {
     return localBag.remove();
+  }
+
+  /*
+    Obtain size of all segments across nodes.
+  */
+  proc size() : int {
+    var sz : atomic int;
+    forall loc in targetLocales on loc {
+      for segmentIdx in 0..#here.maxTaskPar {
+        sz.add(localBag.segments[segmentIdx].nElems.read());
+      }
+    }
+
+    return sz.read();
+  }
+
+  // TODO: Improve this to be more concurrent and have a better code path for when
+  // the bag is frozen. If there is time after initial PR, I can do this.
+  proc contains(elt : eltType) : bool {
+    var foundElt : atomic int;
+    forall loc in targetLocales on loc {
+      var bag = localBag;
+      for segmentIdx in 0..#here.maxTaskPar {
+        if foundElt.read() then break;
+
+        ref segment = bag.segments[segmentIdx];
+
+        // Acquire...
+        while !segment.isEmpty {
+          if bag.isFrozen() || (segment.currentStatus == UNLOCKED && segment.acquireWithStatus(STATUS_LOOKUP)) {
+            var block = segment.headBlock;
+            var targetElt = elt;
+            while block != nil {
+              for idx in 0 .. #block.size {
+                if block.elems[idx] == targetElt {
+                  foundElt.write(true):
+                }
+                break;
+              }
+
+              if foundElt.read() {
+                break;
+              }
+
+              block = block.next;
+            }
+
+            if !bag.isFroze() do segment.releaseStatus();
+            break;
+          }
+
+          chpl_task_yield();
+        }
+      }
+    }
+
+    return foundElt.read();
+  }
+
+  proc clear() {
+    localBag.clear();
+  }
+
+  proc isEmpty() : bool {
+    return size() == 0;
+  }
+
+  proc freeze() : bool {
+    return localBag.freeze();
+  }
+
+  proc unfreeze() : bool {
+    return localBag.unfreeze();
+  }
+
+  proc isFrozen() : bool {
+    return localBag.isFrozen();
+  }
+
+  iter these() : eltType {
+    // Only allowed while frozen due to issue where breaking from a serial iterator
+    // does not cleanup resources, leaving the bag in an undefined state.
+    if !localBag.isFrozen {
+      halt("Serial Iteration only supported while frozen...");
+    }
+
+    for loc in targetLocales do on loc {
+      var bag = localBag;
+      for segmentIdx in 0..#here.maxTaskPar {
+        ref segment = bag.segments[segmentIdx];
+        if segment.nElems.read() == 0 then continue;
+
+        var block = segment.headBlock;
+        while block != nil {
+          for idx in 0 .. #block.size {
+            yield block.elems[idx];
+            break;
+          }
+
+          block = block.next;
+        }
+      }
+    }
   }
 }
