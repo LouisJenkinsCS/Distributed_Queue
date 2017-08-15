@@ -329,7 +329,7 @@ record BagSegment {
 */
 class Bag : Collection {
   // A handle to our parent 'distributed' bag, which is needed for work stealing.
-  var parentHandle;
+  var parentHandle : DistributedBag(eltType);
 
   /*
     Helps evenly distribute and balance placement of elements in a best-effort
@@ -590,6 +590,7 @@ class Bag : Collection {
                   if loadBalanceInProgress.testAndSet() {
                     segment.releaseStatus();
 
+                    loadBalanceInProgress.waitFor(false);
                     // Reset our phase and scan for more elements...
                     phase = REMOVE_BEST_CASE;
                     break;
@@ -606,14 +607,10 @@ class Bag : Collection {
                   var isEmpty : atomic bool;
                   isEmpty.write(true);
                   segment.releaseStatus();
-                  writeln("Stealing work...");
                   coforall segmentIdx in 0..#here.maxTaskPar {
-                    writeln("Stealing from idx: ", segmentIdx);
                     var stolenWork : [{0..#numLocales}] (int, c_ptr(eltType));
                     coforall loc in parentHandle.targetLocales {
-                      writeln("jumping to loc: ", loc);
                       if loc != here then on loc {
-                        writeln("On loc: ", loc);
                         // As we jumped to the target node, 'localBag' returns
                         // the target's bag that we are attempting to steal from.
                         var targetBag = parentHandle.localBag;
@@ -663,8 +660,6 @@ class Bag : Collection {
                       chpl_task_yield();
                     }
 
-                    writeln("Stole work...");
-
                     // Add stolen elements to segment...
                     for (nStolen, stolenPtr) in stolenWork {
                       if nStolen == 0 then continue;
@@ -672,7 +667,6 @@ class Bag : Collection {
                       c_free(stolenPtr);
 
                       // Let parent know that the bag is not empty.
-                      writeln(here, ": stole ", nStolen);
                       isEmpty.write(false);
                     }
                     recvSegment.releaseStatus();
@@ -682,17 +676,14 @@ class Bag : Collection {
 
                   // At this point, if no work has been found, we will return empty...
                   if isEmpty.read() {
-                    writeln("Empty, leaving...");
                     return (false, _defaultOf(eltType));
                   } else {
-                    writeln("Items available, looping...");
                     // Otherwise, we try to get data like everyone else.
                     phase = REMOVE_BEST_CASE;
                     break;
                   }
                 }
               }
-              otherwise do writeln("segment status: ", segments[startIdx].currentStatus);
             }
 
             // Backoff to maximum...
@@ -740,19 +731,24 @@ class Bag : Collection {
 
 
 class DistributedBag : Collection {
-  var targetLocales;
+  var targetLocDom : domain(1);
+  var targetLocales : [targetLocDom] locale;
   var pid : int;
 
   // Node-local fields
-  var bag : Bag(eltType, DistributedBag(eltType, targetLocales.type));
+  var bag : Bag(eltType);
 
-  proc DistributedBag(type eltType, targetLocales = Locales) {
+  proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
     bag = new Bag(eltType, this);
+    this.targetLocDom = targetLocDom;
+    this.targetLocales = targetLocales;
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedBag(other, privData, type eltType = other.eltType, targetLocales = other.targetLocales) {
+  proc DistributedBag(other, privData, type eltType = other.eltType) {
     bag = new Bag(eltType, this);
+    this.targetLocDom = other.targetLocDom;
+    this.targetLocales = other.targetLocales;
   }
 
   proc dsiPrivatize(privData) {

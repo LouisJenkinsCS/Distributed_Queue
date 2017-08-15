@@ -1,4 +1,3 @@
-use DistributedBoundedQueue;
 use DistributedQueue;
 use DistributedBag;
 use SynchronizedList;

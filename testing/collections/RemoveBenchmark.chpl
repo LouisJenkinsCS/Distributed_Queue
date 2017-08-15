@@ -1,5 +1,4 @@
 use Collection;
-use DistributedBoundedQueue;
 use DistributedQueue;
 use DistributedBag;
 use SynchronizedList;
@@ -80,7 +79,7 @@ proc main() {
       plotter = plotter,
       benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedBag(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+        var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
         return c;
       }
@@ -100,7 +99,7 @@ proc main() {
       plotter = plotter,
       benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedBag(int, targetLocDom=bmd.targetLocDom, targetLocales=bmd.targetLocales);
+        var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
         coforall loc in bmd.targetLocales do on loc {
           forall i in 1 .. bmd.totalOps / bmd.targetLocales.size do c.add(i);
         }

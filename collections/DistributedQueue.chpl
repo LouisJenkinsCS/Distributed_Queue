@@ -1,4 +1,4 @@
-use Collection.Queue;
+use Collection;
 use CollectionsTest;
 use NQueens;
 
@@ -96,7 +96,7 @@ class DistributedQueueSlot {
 /*
   An unbounded queue that is distributed across nodes.
 */
-class DistributedQueue : Queue {
+class DistributedQueue : Collection {
   var cap;
   var targetLocales;
 

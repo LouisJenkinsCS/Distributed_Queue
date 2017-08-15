@@ -1,4 +1,4 @@
-use Collection.List;
+use Collection;
 
 class SynchronizedListNode {
   type eltType;
