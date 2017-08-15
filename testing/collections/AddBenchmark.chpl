@@ -1,7 +1,6 @@
-use DistributedQueue;
+use DistributedDeque;
 use DistributedBag;
 use SynchronizedList;
-use Collection;
 use Benchmark;
 use Plot;
 
@@ -26,10 +25,10 @@ proc main() {
       benchTime = 10,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedQueue - Bounded",
+      benchName = "DistributedDeque - Bounded",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedQueue(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
+        return new DistributedDeque(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
       }
   );
 
@@ -39,10 +38,10 @@ proc main() {
       benchTime = 10,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedQueue",
+      benchName = "DistributedDeque",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedQueue(int, targetLocales=bmd.targetLocales);
+        return new DistributedDeque(int, targetLocales=bmd.targetLocales);
       }
   );
 

@@ -25,11 +25,11 @@ proc main() {
       benchFn = benchFn,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedQueue",
+      benchName = "DistributedDeque",
       plotter = plotter,
       benchTime = 10,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedQueue(int, targetLocales=bmd.targetLocales);
+        var c = new DistributedDeque(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
         return c;
       }
