@@ -23,10 +23,10 @@ DistributedQueue-UnitTest:
 	collections/Collection.chpl benchmark/NQueens.chpl \
 	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedQueue -o $(OUT)
 
-DistributedBoundedQueue-UnitTest:
-	chpl collections/DistributedBoundedQueue.chpl testing/unit/CollectionsTest.chpl \
+DistributedBag-UnitTest:
+	chpl collections/DistributedBag.chpl testing/unit/CollectionsTest.chpl \
 	collections/Collection.chpl benchmark/NQueens.chpl \
-	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedBoundedQueue -o $(OUT)
+	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedBag -o $(OUT)
 
 clean:
 	rm $(OUT) $(OUT)_real

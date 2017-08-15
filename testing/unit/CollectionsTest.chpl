@@ -26,6 +26,7 @@ proc counterTest(c : Collection(int)) {
   for elem in c {
     actual = actual + elem;
   }
+  writeln("actual: ", actual, ", expected: ", expected);
   assert(actual == expected);
   writeln("Iteration: Passed");
   writeln(c.size());
@@ -44,6 +45,7 @@ proc counterTest(c : Collection(int)) {
       while hasElem {
         perTaskActual = perTaskActual + elt;
         (hasElem, elt) = _c.remove();
+        writeln((hasElem, elt));
       }
       perLocaleActual.add(perTaskActual);
     }

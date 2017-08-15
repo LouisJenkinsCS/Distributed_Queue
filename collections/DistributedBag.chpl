@@ -1,4 +1,6 @@
 use Collection;
+use CollectionsTest;
+use NQueens;
 use BlockDist;
 
 /*
@@ -158,11 +160,11 @@ record BagSegment {
   }
 
   inline proc acquireWithStatus(newStatus) {
-    return status.compareExchangeStrong(UNLOCKED, newStatus);
+    return status.compareExchangeStrong(STATUS_UNLOCKED, newStatus);
   }
 
   inline proc isUnlocked {
-    return status.read() == UNLOCKED;
+    return status.read() == STATUS_UNLOCKED;
   }
 
   inline proc currentStatus {
@@ -170,7 +172,7 @@ record BagSegment {
   }
 
   inline proc releaseStatus() {
-    status.write(UNLOCKED);
+    status.write(STATUS_UNLOCKED);
   }
 
   inline proc transferElements(destPtr, n, locId = here.id) {
@@ -327,7 +329,7 @@ record BagSegment {
 */
 class Bag : Collection {
   // A handle to our parent 'distributed' bag, which is needed for work stealing.
-  var parentHandle : DistributedBag(eltType);
+  var parentHandle;
 
   /*
     Helps evenly distribute and balance placement of elements in a best-effort
@@ -368,14 +370,14 @@ class Bag : Collection {
     }
 
     // Mark as transient state...
-    coforall loc in targetLocales do on loc {
+    coforall loc in parentHandle.targetLocales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
       localBag.frozenState.write(FREEZE_MARKED);
       localBag.concurrentTasks.waitFor(0);
     }
 
     // Mark as frozen...
-    coforall loc in targetLocales do on loc {
+    coforall loc in parentHandle.targetLocales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
       localBag.frozenState.write(FREEZE_FROZEN);
     }
@@ -390,14 +392,14 @@ class Bag : Collection {
     }
 
     // Mark as transient state...
-    coforall loc in targetLocales do on loc {
+    coforall loc in parentHandle.targetLocales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
       localBag.frozenState.write(FREEZE_MARKED);
       localBag.concurrentTasks.waitFor(0);
     }
 
     // Mark as unfrozen...
-    coforall loc in Locales do on loc {
+    coforall loc in parentHandle.targetLocales do on loc {
       var localBag = parentHandle.getPrivatizedThis.bag;
       localBag.frozenState.write(FREEZE_UNFROZEN);
     }
@@ -443,7 +445,7 @@ class Bag : Collection {
             ref segment = segments[(startIdx + offset) % here.maxTaskPar];
 
             // Attempt to acquire...
-            if segment.acquireWithStatus(ENQUEUE) {
+            if segment.acquireWithStatus(STATUS_ADD) {
               segment.addElements(elt);
               segment.releaseStatus();
               return true;
@@ -463,8 +465,8 @@ class Bag : Collection {
           while true {
             select segment.currentStatus {
               // Quick acquire...
-              when UNLOCKED do {
-                if segment.acquireWithStatus(ENQUEUE) {
+              when STATUS_UNLOCKED do {
+                if segment.acquireWithStatus(STATUS_ADD) {
                   segment.addElements(elt);
                   segment.releaseStatus();
                   return true;
@@ -501,7 +503,7 @@ class Bag : Collection {
             ref segment = segments[idx];
 
             // Attempt to acquire...
-            if !segment.isEmpty && segment.acquireWithStatus(DEQUEUE) {
+            if !segment.isEmpty && segment.acquireWithStatus(STATUS_REMOVE) {
               var (hasElem, elem) : (bool, eltType) = segment.takeElement();
               segment.releaseStatus();
 
@@ -530,7 +532,7 @@ class Bag : Collection {
 
             // Attempt to acquire...
             while !segment.isEmpty {
-              if segment.isUnlocked && segment.acquireWithStatus(DEQUEUE) {
+              if segment.isUnlocked && segment.acquireWithStatus(STATUS_REMOVE) {
                 var (hasElem, elem) : (bool, eltType) = segment.takeElement();
                 segment.releaseStatus();
 
@@ -567,8 +569,8 @@ class Bag : Collection {
 
             select segment.currentStatus {
               // Quick acquire
-              when UNLOCKED {
-                if segment.acquireWithStatus(DEQUEUE) {
+              when STATUS_UNLOCKED {
+                if segment.acquireWithStatus(STATUS_REMOVE) {
                   // We're lucky; another element has been added to the current segment,
                   // take it and leave like normal...
                   if !segment.isEmpty {
@@ -577,19 +579,21 @@ class Bag : Collection {
                     return (hasElem, elem);
                   }
 
+                  if parentHandle.targetLocales.size == 1 {
+                    segment.releaseStatus();
+                    return (false, _defaultOf(eltType));
+                  }
+
                   // Attempt to become the sole work stealer for this node. If we
                   // do not, we spin until they finish. We need to release the lock
                   // on our segment so our segment may be load balanced as well.
                   if loadBalanceInProgress.testAndSet() {
                     segment.releaseStatus();
-                    if logMPMCQueue then writeln(here, ": loadBalance is in progres... Looking for work...");
 
                     // Reset our phase and scan for more elements...
                     phase = REMOVE_BEST_CASE;
                     break;
                   }
-
-                  if logMPMCQueue then writeln(here, ": work stealing...");
 
                   // We are the sole work stealer, and so it is our responsibility
                   // to balance the load for our node. We fork-join new worker
@@ -602,10 +606,14 @@ class Bag : Collection {
                   var isEmpty : atomic bool;
                   isEmpty.write(true);
                   segment.releaseStatus();
+                  writeln("Stealing work...");
                   coforall segmentIdx in 0..#here.maxTaskPar {
+                    writeln("Stealing from idx: ", segmentIdx);
                     var stolenWork : [{0..#numLocales}] (int, c_ptr(eltType));
                     coforall loc in parentHandle.targetLocales {
+                      writeln("jumping to loc: ", loc);
                       if loc != here then on loc {
+                        writeln("On loc: ", loc);
                         // As we jumped to the target node, 'localBag' returns
                         // the target's bag that we are attempting to steal from.
                         var targetBag = parentHandle.localBag;
@@ -618,7 +626,7 @@ class Bag : Collection {
                           // we test-and-test-and-set until we gain ownership.
                           while !targetSegment.isEmpty {
                             var backoff = 0;
-                            if targetSegment.currentStatus == UNLOCKED && targetSegment.acquireWithStatus(DEQUEUE) {
+                            if targetSegment.currentStatus == STATUS_UNLOCKED && targetSegment.acquireWithStatus(STATUS_REMOVE) {
                               // Sanity check: ensure segment wasn't emptied since last check
                               if targetSegment.isEmpty {
                                 targetSegment.releaseStatus();
@@ -629,7 +637,6 @@ class Bag : Collection {
                               // We steal at most 1MB worth of data. If the user has less than that, we steal a %, at least 1.
                               const mb = WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024;
                               var toSteal = max(1, min(mb / sizeof(eltType), targetSegment.nElems.read() * WORK_STEALING_RATIO)) : int;
-                              if logMPMCQueue then writeln(stolenWork.locale, ": Stealing ", toSteal, " elements from ", here);
 
                               // Allocate storage...
                               on stolenWork do stolenWork[loc.id] = (toSteal, c_malloc(eltType, toSteal));
@@ -642,9 +649,7 @@ class Bag : Collection {
                             }
 
                             // Backoff...
-                            if backoff == 0 then chpl_task_yield();
-                            else sleep(max(1000, 2 ** backoff), TimeUnits.microseconds);
-                            backoff = backoff + 1;
+                            chpl_task_yield();
                           }
                         }
                       }
@@ -654,9 +659,11 @@ class Bag : Collection {
                     // horizontal segment on our node. Acquire lock...
                     ref recvSegment = segments[segmentIdx];
                     while true {
-                      if recvSegment.currentStatus == UNLOCKED && recvSegment.acquireWithStatus(ENQUEUE) then break;
+                      if recvSegment.currentStatus == STATUS_UNLOCKED && recvSegment.acquireWithStatus(STATUS_ADD) then break;
                       chpl_task_yield();
                     }
+
+                    writeln("Stole work...");
 
                     // Add stolen elements to segment...
                     for (nStolen, stolenPtr) in stolenWork {
@@ -665,6 +672,7 @@ class Bag : Collection {
                       c_free(stolenPtr);
 
                       // Let parent know that the bag is not empty.
+                      writeln(here, ": stole ", nStolen);
                       isEmpty.write(false);
                     }
                     recvSegment.releaseStatus();
@@ -674,20 +682,21 @@ class Bag : Collection {
 
                   // At this point, if no work has been found, we will return empty...
                   if isEmpty.read() {
+                    writeln("Empty, leaving...");
                     return (false, _defaultOf(eltType));
                   } else {
+                    writeln("Items available, looping...");
                     // Otherwise, we try to get data like everyone else.
                     phase = REMOVE_BEST_CASE;
                     break;
                   }
                 }
               }
+              otherwise do writeln("segment status: ", segments[startIdx].currentStatus);
             }
 
             // Backoff to maximum...
-            if backoff == 0 then chpl_task_yield();
-            else sleep(max(1000, 2 ** backoff), TimeUnits.microseconds);
-            backoff = backoff + 1;
+            chpl_task_yield();
           }
         }
 
@@ -723,7 +732,9 @@ class Bag : Collection {
   }
 
   iter these() : eltType {
-    return parentHandle.these;
+    for elt in parentHandle {
+      yield elt;
+    }
   }
 }
 
@@ -733,7 +744,7 @@ class DistributedBag : Collection {
   var pid : int;
 
   // Node-local fields
-  var bag : Bag(eltType);
+  var bag : Bag(eltType, DistributedBag(eltType, targetLocales.type));
 
   proc DistributedBag(type eltType, targetLocales = Locales) {
     bag = new Bag(eltType, this);
@@ -773,9 +784,9 @@ class DistributedBag : Collection {
   */
   proc size() : int {
     var sz : atomic int;
-    forall loc in targetLocales on loc {
+    forall loc in targetLocales do on loc {
       for segmentIdx in 0..#here.maxTaskPar {
-        sz.add(localBag.segments[segmentIdx].nElems.read());
+        sz.add(localBag.segments[segmentIdx].nElems.read() : int);
       }
     }
 
@@ -785,8 +796,8 @@ class DistributedBag : Collection {
   // TODO: Improve this to be more concurrent and have a better code path for when
   // the bag is frozen. If there is time after initial PR, I can do this.
   proc contains(elt : eltType) : bool {
-    var foundElt : atomic int;
-    forall loc in targetLocales on loc {
+    var foundElt : atomic bool;
+    forall loc in targetLocales do on loc {
       var bag = localBag;
       for segmentIdx in 0..#here.maxTaskPar {
         if foundElt.read() then break;
@@ -795,15 +806,16 @@ class DistributedBag : Collection {
 
         // Acquire...
         while !segment.isEmpty {
-          if bag.isFrozen() || (segment.currentStatus == UNLOCKED && segment.acquireWithStatus(STATUS_LOOKUP)) {
+          if bag.isFrozen() || (segment.currentStatus == STATUS_UNLOCKED && segment.acquireWithStatus(STATUS_LOOKUP)) {
             var block = segment.headBlock;
             var targetElt = elt;
             while block != nil {
               for idx in 0 .. #block.size {
+                writeln("block.elems[", idx, "]: ", block.elems[idx], ", targetElt: ", targetElt);
                 if block.elems[idx] == targetElt {
-                  foundElt.write(true):
+                  foundElt.write(true);
+                  break;
                 }
-                break;
               }
 
               if foundElt.read() {
@@ -813,7 +825,7 @@ class DistributedBag : Collection {
               block = block.next;
             }
 
-            if !bag.isFroze() do segment.releaseStatus();
+            if !bag.isFrozen() then segment.releaseStatus();
             break;
           }
 
@@ -848,21 +860,22 @@ class DistributedBag : Collection {
   iter these() : eltType {
     // Only allowed while frozen due to issue where breaking from a serial iterator
     // does not cleanup resources, leaving the bag in an undefined state.
-    if !localBag.isFrozen {
+    if !localBag.isFrozen() {
       halt("Serial Iteration only supported while frozen...");
     }
 
-    for loc in targetLocales do on loc {
-      var bag = localBag;
+    for loc in targetLocales {
+      var targetBag : bag.type;
+      on loc do targetBag = localBag;
       for segmentIdx in 0..#here.maxTaskPar {
-        ref segment = bag.segments[segmentIdx];
+        ref segment = targetBag.segments[segmentIdx];
         if segment.nElems.read() == 0 then continue;
 
         var block = segment.headBlock;
         while block != nil {
           for idx in 0 .. #block.size {
+            writeln("block.elems[", idx, "]: ", block.elems[idx]);
             yield block.elems[idx];
-            break;
           }
 
           block = block.next;
@@ -870,4 +883,12 @@ class DistributedBag : Collection {
       }
     }
   }
+}
+
+proc main() {
+  var db = new DistributedBag(int);
+
+  counterTest(db);
+  doNQueens(new DistributedBag(26 * int));
+  writeln("Done tests...");
 }

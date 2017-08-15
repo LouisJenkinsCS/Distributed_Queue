@@ -81,6 +81,6 @@ class Collection {
 /*
   Syntactic sugar for 'add'.
 */
-proc +=(ref c : Collection(?eltTyp), elt : eltType) {
+proc +=(ref c : Collection(?eltType), elt : eltType) {
   c.add(elt);
 }
