@@ -1,5 +1,5 @@
 use Collection;
-use DistributedQueue;
+use DistributedDeque;
 use DistributedBag;
 use SynchronizedList;
 use Benchmark;

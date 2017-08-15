@@ -14,6 +14,8 @@ private const FREEZE_UNFROZEN = 0;
 private const FREEZE_MARKED = 1;
 private const FREEZE_FROZEN = 2;
 
+private param DEQUE_BLOCK_SIZE = 8;
+
 class DistributedDequeSlotNode {
   type eltType;
   var elt : eltType;
