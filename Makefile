@@ -18,10 +18,10 @@ CollectionRemove-Benchmark:
 	misc/LocalAtomicObject.chpl misc/GlobalAtomicObject.chpl \
 	$(CHPLFLAGS) $(EXTRAFLAGS) --main-module RemoveBenchmark -o $(OUT)
 
-DistributedQueue-UnitTest:
-	chpl collections/DistributedQueue.chpl testing/unit/CollectionsTest.chpl \
+DistributedDeque-UnitTest:
+	chpl collections/DistributedDeque.chpl testing/unit/CollectionsTest.chpl \
 	collections/Collection.chpl benchmark/NQueens.chpl \
-	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedQueue -o $(OUT)
+	$(CHPLFLAGS) --no-loop-invariant-code-motion --main-module DistributedDeque -o $(OUT)
 
 DistributedBag-UnitTest:
 	chpl collections/DistributedBag.chpl testing/unit/CollectionsTest.chpl \

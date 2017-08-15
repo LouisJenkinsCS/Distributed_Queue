@@ -35,21 +35,6 @@ proc main() {
       }
   );
 
-  // DistributedBoundedQueue - Benchmark
-  runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "DistributedQueue - Bounded",
-      plotter = plotter,
-      benchTime = 10,
-      initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedQueue(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
-        forall i in 1 .. bmd.totalOps do c.add(i);
-        return c;
-      }
-  );
-
   // SynchronizedList - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
