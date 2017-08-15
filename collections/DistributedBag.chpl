@@ -1,6 +1,4 @@
 use Collection;
-use CollectionsTest;
-use NQueens;
 use BlockDist;
 
 /*
@@ -807,7 +805,6 @@ class DistributedBag : Collection {
             var targetElt = elt;
             while block != nil {
               for idx in 0 .. #block.size {
-                writeln("block.elems[", idx, "]: ", block.elems[idx], ", targetElt: ", targetElt);
                 if block.elems[idx] == targetElt {
                   foundElt.write(true);
                   break;
@@ -870,7 +867,6 @@ class DistributedBag : Collection {
         var block = segment.headBlock;
         while block != nil {
           for idx in 0 .. #block.size {
-            writeln("block.elems[", idx, "]: ", block.elems[idx]);
             yield block.elems[idx];
           }
 
@@ -879,12 +875,4 @@ class DistributedBag : Collection {
       }
     }
   }
-}
-
-proc main() {
-  var db = new DistributedBag(int);
-
-  counterTest(db);
-  doNQueens(new DistributedBag(26 * int));
-  writeln("Done tests...");
 }

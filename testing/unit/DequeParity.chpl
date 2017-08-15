@@ -1,4 +1,5 @@
 use Barrier;
+use DistributedDeque;
 
 // For the parity test, we separate even and odd numbers on each side of the Deque.
 // Even numbers are inserted from the front, and odd numbers are inserted from the back.
@@ -8,7 +9,7 @@ use Barrier;
 // If we are testing a bounded queue...
 config param isBounded = false;
 
-const nElemsPerTask = 1000;
+config param nElemsPerTask = 1000;
 const totalElems = numLocales * here.maxTaskPar * nElemsPerTask;
 
 var cap : int;
@@ -50,3 +51,5 @@ for 1 .. totalElems {
       assert(elem % 2 != 0);
   }
 }
+
+writeln("SUCCESS");

@@ -1,5 +1,6 @@
 use Barrier;
-use Collection;
+use DistributedBag;
+use DistributedDeque;
 
 /*
 Precomputed number of solutions...
@@ -157,6 +158,7 @@ var barrier = new Barrier(here.maxTaskPar * numLocales);
 coforall loc in Locales do on loc {
   coforall tid in 0 .. #here.maxTaskPar {
     barrier.barrier();
+    var nSpins : int;
     while found.read() < totalSolutions {
       var (exists, myBoard) = c.remove();
       // Spin: We haven't found solution yet...
@@ -186,3 +188,5 @@ coforall loc in Locales do on loc {
     }
   }
 }
+
+writeln("SUCCESS");

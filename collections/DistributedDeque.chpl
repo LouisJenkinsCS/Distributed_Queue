@@ -1,6 +1,4 @@
 use Collection;
-use CollectionsTest;
-use NQueens;
 
 // TODO: Make most methods convoy avoidant (randomization and deferred processing)...
 // TODO: Convert into a Deque; we perform bounds checking at the door, so head and tail
@@ -58,6 +56,7 @@ class DistributedDequeSlot {
     }
   }
 
+  // TODO: Make 'local'
   proc popBack() : eltType {
     var elt : eltType;
     on this {
@@ -401,7 +400,7 @@ class DistributedDeque : Collection {
 
     // Test if we can continue...
     if enterAddBarrier(localThis) == false {
-      return (false, _defaultOf(eltType));
+      return false;
     }
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
@@ -600,12 +599,4 @@ class DistributedDeque : Collection {
     var localThis = getPrivatizedThis;
     for slot in localThis.slots do delete slot;
   }
-}
-
-proc main() {
-  var dq = new DistributedDeque(int);
-
-  counterTest(dq);
-  doNQueens(new DistributedDeque(26 * int));
-  writeln("Done tests...");
 }

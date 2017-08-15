@@ -1,4 +1,5 @@
-use Collection;
+use DistributedBag;
+use DistributedDeque;
 use Barrier;
 
 // For this test, we implement a simple counter; we add a predetermined number
@@ -8,7 +9,7 @@ config param isBoundedDeque = false;
 config param isDeque = false;
 config param isBag = false;
 
-const nElems = 1000;
+config param nElems = 1000;
 const expected = (nElems * (nElems + 1)) / 2;
 
 var c : Collection(int);
@@ -40,7 +41,6 @@ var actual = 0;
 for elem in c {
   actual = actual + elem;
 }
-writeln("actual: ", actual, ", expected: ", expected);
 assert(actual == expected);
 assert(c.size() == nElems);
 writeln("Iteration: Passed");
@@ -59,15 +59,13 @@ coforall loc in Locales do on loc {
     while hasElem {
       perTaskActual = perTaskActual + elt;
       (hasElem, elt) = _c.remove();
-      writeln((hasElem, elt));
     }
     perLocaleActual.add(perTaskActual);
   }
   concurrentActual.add(perLocaleActual.read());
 }
 
-writeln("size: ", c.size());
-writeln("concurrentActual: ", concurrentActual.read(), ", expected: ", expected);
 assert(concurrentActual.read() == expected);
 assert(c.size() == 0 && c.isEmpty());
 writeln("Remove: Passed");
+writeln("SUCCESS");

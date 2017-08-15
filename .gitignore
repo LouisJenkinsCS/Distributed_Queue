@@ -29,7 +29,8 @@
 *.dylib
 
 # Executables
-*.exe*
+*.exe
+*.exe_real
 *.out*
 *.app
 *.i*86
