@@ -758,7 +758,7 @@ class DistributedDeque : Collection {
   }
 
   iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
-    var node = followThis.head.next;
+    var node = followThis.head;
     while node != nil {
       var headIdx = node.headIdx;
       for 1 .. node.size {
