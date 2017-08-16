@@ -46,10 +46,10 @@ class LocalDequeNode {
     size += 1;
   }
 
-  inline proc popBack() : elt {
+  inline proc popBack() : eltType {
     tailIdx -= 1;
     if tailIdx == 0 {
-      tailIdx = DEQUE_BLOCK_SIZE
+      tailIdx = DEQUE_BLOCK_SIZE;
     }
 
     size -= 1;
@@ -66,7 +66,7 @@ class LocalDequeNode {
     size += 1;
   }
 
-  inline proc popFront() : elt {
+  inline proc popFront() : eltType {
     headIdx += 1;
     if headIdx > DEQUE_BLOCK_SIZE {
       headIdx = 1;
@@ -99,8 +99,9 @@ class LocalDeque {
   inline proc recycleNode() {
     // If we have cached a previous used node, reuse it here...
     if cached != nil {
+      var tmp = cached;
       cached = nil;
-      return cached;
+      return tmp;
     }
 
     // Create a new one...
@@ -184,6 +185,7 @@ class LocalDeque {
 
           size.sub(1);
           lock$;
+          break;
         }
       }
       elt = _elt;
@@ -260,6 +262,7 @@ class LocalDeque {
 
           size.sub(1);
           lock$;
+          break;
         }
       }
       elt = _elt;
