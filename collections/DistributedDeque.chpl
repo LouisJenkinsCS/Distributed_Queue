@@ -117,36 +117,29 @@ class LocalDeque {
 
   proc pushBack(elt : eltType) {
     on this {
-      lock$ = true;
+      var _elt = elt;
+      local {
+        lock$ = true;
 
-      // Its empty...
-      if tail == nil {
-        tail = recycleNode();
-        head = tail;
+        // Its empty...
+        if tail == nil {
+          tail = recycleNode();
+          head = tail;
+        }
+
+        // Its full...
+        if tail.isFull {
+          tail.next = recycleNode();
+          tail.next.prev = tail;
+          tail = tail.next;
+        }
+
+        // Push...
+        tail.pushBack(_elt);
+        size.add(1);
+
+        lock$;
       }
-
-      // Its full...
-      if tail.isFull {
-        tail.next = recycleNode();
-        tail = tail.next;
-      }
-
-      // Push...
-      tail.headIdx = ((tail.headIdx - 1) % DEQUE_BLOCK_SIZE);
-      tail.elements[tail.headIdx]
-
-
-      if tail != nil {
-        tail.next = node;
-      }
-      if head == nil {
-        head = node;
-      }
-      node.prev = tail;
-      tail = node;
-      size.add(1);
-
-      lock$;
     }
   }
 
@@ -154,29 +147,46 @@ class LocalDeque {
   proc popBack() : eltType {
     var elt : eltType;
     on this {
-      while true {
-        // Wait until there is an element for us...
-        while size.read() == 0 do chpl_task_yield();
-        lock$ = true;
+      var _elt : eltType;
+      local {
+        while true {
+          // Check if there is an element for us...
+          if size.read() == 0 {
+            while size.read() == 0 {
+              chpl_task_yield();
+            }
+          }
 
-        // Someone else came in and took a value, wait for the next one...
-        if size.read() == 0 {
+          lock$ = true;
+
+          // Someone else came in and took a value, wait for the next one...
+          if size.read() == 0 {
+            lock$;
+            continue;
+          }
+
+          // Pop...
+          _elt = tail.popBack();
+          if tail.isEmpty {
+            var node = tail;
+            tail = tail.prev;
+
+            // If not empty, remove reference to retired node...
+            // If it is empty, fix the head...
+            if tail != nil {
+              tail.next = nil;
+            } else {
+              head = nil;
+            }
+
+            retireNode(node);
+          }
+
+          size.sub(1);
           lock$;
-          continue;
         }
-
-        var node = tail;
-        if node == head {
-          head = nil;
-        }
-        tail = node.prev;
-        size.sub(1);
-
-        lock$;
-        elt = node.elt;
-        delete node;
-        break;
       }
+      elt = _elt;
     }
 
     return elt;
@@ -184,49 +194,75 @@ class LocalDeque {
 
   proc pushFront(elt : eltType) {
     on this {
-      var node = new LocalDequeNode(eltType, elt=elt);
-      lock$ = true;
+      var _elt = elt;
+      local {
+        lock$ = true;
 
-      if head != nil {
-        head.prev = node;
-      }
-      if tail == nil {
-        tail = node;
-      }
-      node.next = head;
-      head = node;
-      size.add(1);
+        // Its empty...
+        if head == nil {
+          head = recycleNode();
+          tail = head;
+        }
 
-      lock$;
+        // Its full...
+        if head.isFull {
+          head.prev = recycleNode();
+          head.prev.next = head;
+          head = head.prev;
+        }
+
+        // Push...
+        tail.pushFront(_elt);
+        size.add(1);
+
+        lock$;
+      }
     }
   }
 
   proc popFront() : eltType {
     var elt : eltType;
     on this {
-      while true {
-        // Wait until there is an element for us...
-        while size.read() == 0 do chpl_task_yield();
-        lock$ = true;
+      var _elt : eltType;
+      local {
+        while true {
+          // Check if there is an element for us...
+          if size.read() == 0 {
+            while size.read() == 0 {
+              chpl_task_yield();
+            }
+          }
 
-        // Someone else came in and took a value, wait for the next one...
-        if size.read() == 0 {
+          lock$ = true;
+
+          // Someone else came in and took a value, wait for the next one...
+          if size.read() == 0 {
+            lock$;
+            continue;
+          }
+
+          // Pop...
+          _elt = head.popFront();
+          if head.isEmpty {
+            var node = head;
+            head = head.next;
+
+            // If not empty, remove reference to retired node...
+            // If it is empty, fix the tail...
+            if head != nil {
+              head.prev = nil;
+            } else {
+              tail = nil;
+            }
+
+            retireNode(node);
+          }
+
+          size.sub(1);
           lock$;
-          continue;
         }
-
-        var node = head;
-        if node == tail {
-          tail = nil;
-        }
-        head = node.next;
-        size.sub(1);
-
-        lock$;
-        elt = node.elt;
-        delete node;
-        break;
       }
+      elt = _elt;
     }
 
     return elt;
@@ -240,6 +276,10 @@ class LocalDeque {
         var tmp = curr.next;
         delete curr;
         curr = tmp;
+      }
+
+      if cached != nil {
+        delete cached;
       }
     }
   }
