@@ -12,35 +12,129 @@ private const FREEZE_UNFROZEN = 0;
 private const FREEZE_MARKED = 1;
 private const FREEZE_FROZEN = 2;
 
+// Default assumption is that the cache line size is 64 bytes and that most elements
+// are within 8 bytes.
 private param DEQUE_BLOCK_SIZE = 8;
 
-class DistributedDequeSlotNode {
+// For each node we manage an unroll block. This block needs to also support Deque
+// operations, and as such we maintain our own mini headIdx and tailIdx. Since we can
+// add and remove from either direction, we must also maintain the size ourselves...
+class LocalDequeNode {
   type eltType;
-  var elt : eltType;
-  var next : DistributedDequeSlotNode(eltType);
-  var prev : DistributedDequeSlotNode(eltType);
+  var elements : DEQUE_BLOCK_SIZE * eltType;
+  var headIdx : int = 1;
+  var tailIdx : int = 1;
+  var size : int;
+  var next : LocalDequeNode(eltType);
+  var prev : LocalDequeNode(eltType);
+
+  inline proc isFull {
+    return size == DEQUE_BLOCK_SIZE;
+  }
+
+  inline proc isEmpty {
+    return size == 0;
+  }
+
+  inline proc pushBack(elt : eltType) {
+    tailIdx += 1;
+    if tailIdx > DEQUE_BLOCK_SIZE {
+      tailIdx = 1;
+    }
+
+    elements[tailIdx] = elt;
+    size += 1;
+  }
+
+  inline proc popBack() : elt {
+    tailIdx -= 1;
+    if tailIdx == 0 {
+      tailIdx = DEQUE_BLOCK_SIZE
+    }
+
+    size -= 1;
+    return elements[tailIdx];
+  }
+
+  inline proc pushFront(elt : eltType) {
+    headIdx -= 1;
+    if headIdx == 0 {
+      headIdx = DEQUE_BLOCK_SIZE;
+    }
+
+    elements[headIdx] = elt;
+    size += 1;
+  }
+
+  inline proc popFront() : elt {
+    headIdx += 1;
+    if headIdx > DEQUE_BLOCK_SIZE {
+      headIdx = 1;
+    }
+
+    size -= 1;
+    return elements[headIdx];
+  }
 }
 
 /*
-  For each slot we maintain a two-locked queue.
+  For each slot we maintain a deque.
 */
-class DistributedDequeSlot {
+class LocalDeque {
   type eltType;
 
   // Locks are atomic to allow us to remotely contest for the lock.
   var lock$ : sync bool;
 
-  var head : DistributedDequeSlotNode(eltType);
-  var tail : DistributedDequeSlotNode(eltType);
+  var head : LocalDequeNode(eltType);
+  var tail : LocalDequeNode(eltType);
+
+  // We cache the last deleted node to handle cases where we have rapid mixed push/pop
+  var cached : LocalDequeNode(eltType);
 
   // The size of a segment. This is used as both a means of knowing when an element
   // gets added, as well as a barrier to prevent the head and tail from being cached.
   var size : atomic int;
 
+  inline proc recycleNode() {
+    // If we have cached a previous used node, reuse it here...
+    if cached != nil {
+      cached = nil;
+      return cached;
+    }
+
+    // Create a new one...
+    return  new LocalDequeNode(eltType);
+  }
+
+  inline proc retireNode(node) {
+    if cached != nil {
+      delete cached;
+    }
+
+    cached = node;
+  }
+
   proc pushBack(elt : eltType) {
     on this {
-      var node = new DistributedDequeSlotNode(eltType, elt=elt);
       lock$ = true;
+
+      // Its empty...
+      if tail == nil {
+        tail = recycleNode();
+        head = tail;
+      }
+
+      // Its full...
+      if tail.isFull {
+        tail.next = recycleNode();
+        tail = tail.next;
+      }
+
+      // Push...
+      tail.headIdx = ((tail.headIdx - 1) % DEQUE_BLOCK_SIZE);
+      tail.elements[tail.headIdx]
+
 
       if tail != nil {
         tail.next = node;
@@ -90,7 +184,7 @@ class DistributedDequeSlot {
 
   proc pushFront(elt : eltType) {
     on this {
-      var node = new DistributedDequeSlotNode(eltType, elt=elt);
+      var node = new LocalDequeNode(eltType, elt=elt);
       lock$ = true;
 
       if head != nil {
@@ -138,7 +232,7 @@ class DistributedDequeSlot {
     return elt;
   }
 
-  proc ~DistributedDequeSlot() {
+  proc ~LocalDeque() {
     on this {
       var curr = head;
 
@@ -179,7 +273,7 @@ class DistributedDeque : Collection {
   // to reduce the amount of contention.
   var nSlots = here.maxTaskPar * targetLocales.size;
   var slotSpace = {0..#nSlots};
-  var slots : [slotSpace] DistributedDequeSlot(eltType);
+  var slots : [slotSpace] LocalDeque(eltType);
 
   proc DistributedDeque(type eltType, cap=-1, targetLocales=Locales) {
     nSlots = here.maxTaskPar * targetLocales.size;
@@ -190,7 +284,7 @@ class DistributedDeque : Collection {
     for 0 .. #here.maxTaskPar {
       for loc in targetLocales do on loc {
         var i = idx.fetchAdd(1);
-        slots[i] = new DistributedDequeSlot(eltType);
+        slots[i] = new LocalDeque(eltType);
       }
     }
 
@@ -567,7 +661,7 @@ class DistributedDeque : Collection {
     }
 
     // We iterate directly over the heads of each slot, so we capture them in advance.
-    var nodes : [{0..#nSlots}] DistributedDequeSlotNode(eltType);
+    var nodes : [{0..#nSlots}] LocalDequeNode(eltType);
     for i in 0 .. #nSlots {
       nodes[i] = slots[i].head;
     }
