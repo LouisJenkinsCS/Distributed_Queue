@@ -37,12 +37,12 @@ class LocalDequeNode {
   }
 
   inline proc pushBack(elt : eltType) {
+    elements[tailIdx] = elt;
+
     tailIdx += 1;
     if tailIdx > DEQUE_BLOCK_SIZE {
       tailIdx = 1;
     }
-
-    elements[tailIdx] = elt;
     size += 1;
   }
 
@@ -67,13 +67,14 @@ class LocalDequeNode {
   }
 
   inline proc popFront() : eltType {
+    var elt = elements[headIdx];
     headIdx += 1;
     if headIdx > DEQUE_BLOCK_SIZE {
       headIdx = 1;
     }
 
     size -= 1;
-    return elements[headIdx];
+    return elt;
   }
 }
 
@@ -658,11 +659,22 @@ class DistributedDeque : Collection {
         const targetElt = elt;
         slot.lock$ = true;
 
-        var prev = slot.head;
-        var node = slot.head.next;
+        var node = slot.head;
         while node != nil {
-          if node.elt == targetElt {
-            foundItem.write(true);
+          var headIdx = node.headIdx;
+          for 1 .. node.size {
+            if node.elements[headIdx] == targetElt {
+              foundItem.write(true);
+              break;
+            }
+
+            headIdx += 1;
+            if headIdx > DEQUE_BLOCK_SIZE {
+              headIdx = 1;
+            }
+          }
+
+          if foundItem.read() {
             break;
           }
         }
@@ -672,11 +684,11 @@ class DistributedDeque : Collection {
       }
 
       if foundItem.read() {
-        break;
+        return true;
       }
     }
 
-    return foundItem.read();
+    return false;
   }
 
   /*
@@ -704,16 +716,37 @@ class DistributedDeque : Collection {
     }
 
     // We iterate directly over the heads of each slot, so we capture them in advance.
-    var nodes : [{0..#nSlots}] LocalDequeNode(eltType);
+    var nodes : [{0..#nSlots}] (int, int, LocalDequeNode(eltType));
     for i in 0 .. #nSlots {
-      nodes[i] = slots[i].head;
+      var node = slots[i].head;
+      nodes[i] = (node.size, node.headIdx, node);
     }
 
     // Iterate over captured head nodes; each time we read them we advance them
     for i in head..#tail {
       var idx = i % nSlots;
-      yield nodes[idx].elt;
-      nodes[idx] = nodes[idx].next;
+      var (size, headIdx, node) = nodes[idx];
+      yield node.elements[headIdx];
+
+      // Update state...
+      size -= 1;
+      headIdx += 1;
+      if headIdx > DEQUE_BLOCK_SIZE {
+        headIdx = 1;
+      }
+
+      // Advance...
+      if size == 0 {
+        node = node.next;
+        if node != nil {
+          nodes[idx] = (node.size, node.headIdx, node);
+        } else {
+          nodes[idx] = (-1, -1, node);
+        }
+      } else {
+        // Else update state...
+        nodes[idx] = (size, headIdx, node);
+      }
     }
   }
 
@@ -727,7 +760,15 @@ class DistributedDeque : Collection {
   iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
     var node = followThis.head.next;
     while node != nil {
-      yield node.elt;
+      var headIdx = node.headIdx;
+      for 1 .. node.size {
+        yield node.elements[headIdx];
+
+        headIdx += 1;
+        if headIdx > DEQUE_BLOCK_SIZE {
+          headIdx = 1;
+        }
+      }
       node = node.next;
     }
   }
