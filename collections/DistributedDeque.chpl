@@ -375,7 +375,7 @@ class DistributedDeque : Collection {
     // At this point, we know we have a space for us. We find our slot based on another
     // fetch-add counter, making this wait-free as well.
     var tail = globalTail.fetchAdd(1) % localThis.nSlots;
-    localThis.slots[tail].pushBack(elt);
+    localThis.slots[abs(tail)].pushBack(elt);
     local { localThis.concurrentTasks.sub(1); }
     return true;
   }
@@ -390,7 +390,7 @@ class DistributedDeque : Collection {
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var tail = globalTail.fetchSub(1) % localThis.nSlots;
-    var elt = localThis.slots[tail].popBack();
+    var elt = localThis.slots[abs(tail)].popBack();
     local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
   }
@@ -405,7 +405,7 @@ class DistributedDeque : Collection {
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var head = globalHead.fetchSub(1) % localThis.nSlots;
-    localThis.slots[head].pushFront(elt);
+    localThis.slots[abs(head)].pushFront(elt);
     local { localThis.concurrentTasks.sub(1); }
     return true;
   }
@@ -420,7 +420,7 @@ class DistributedDeque : Collection {
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var head = globalHead.fetchAdd(1) % localThis.nSlots;
-    var elt = localThis.slots[head].popFront();
+    var elt = localThis.slots[abs(head)].popFront();
     local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
   }

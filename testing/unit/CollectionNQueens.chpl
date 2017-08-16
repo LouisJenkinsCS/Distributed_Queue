@@ -143,9 +143,9 @@ const totalSolutions = getTotalSolutions();
 var found : atomic int;
 var c : Collection(boardType);
 if isDeque {
-  c = new DistributedDeque(int);
+  c = new DistributedDeque(boardType);
 } else if isBag {
-  c = new DistributedBag(int);
+  c = new DistributedBag(boardType);
 } else {
   halt("Require 'isDeque' or 'isBag' to be set...");
 }
