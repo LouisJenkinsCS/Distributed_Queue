@@ -215,7 +215,7 @@ class LocalDeque {
         }
 
         // Push...
-        tail.pushFront(_elt);
+        head.pushFront(_elt);
         size.add(1);
 
         lock$;
@@ -383,7 +383,7 @@ class DistributedDeque : Collection {
         on this {
           var readSize = queueSize.read();
           // Attempt to fix, but yield to reduce potential contention and CPU hogging.
-          while readSize < 0 && queueSize.compareExchangeWeak(readSize, 0) {
+          while readSize < 0 && !queueSize.compareExchangeWeak(readSize, 0) {
             chpl_task_yield();
             readSize = queueSize.read();
           }
@@ -440,7 +440,7 @@ class DistributedDeque : Collection {
           on this {
             var readSize = queueSize.read();
             // Attempt to fix, but yield to reduce potential contention and CPU hogging.
-            while readSize > this.cap && queueSize.compareExchangeWeak(readSize, this.cap) {
+            while readSize > this.cap && !queueSize.compareExchangeWeak(readSize, this.cap) {
               chpl_task_yield();
               readSize = queueSize.read();
             }
@@ -527,7 +527,7 @@ class DistributedDeque : Collection {
     }
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
-    var tail = globalTail.fetchSub(1) % localThis.nSlots;
+    var tail = (globalTail.fetchSub(1) - 1) % localThis.nSlots;
     var elt = localThis.slots[abs(tail)].popBack();
     local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
@@ -542,7 +542,7 @@ class DistributedDeque : Collection {
     }
 
     // We find our slot based on another fetch-add counter, making this wait-free as well.
-    var head = globalHead.fetchSub(1) % localThis.nSlots;
+    var head = (globalHead.fetchSub(1) - 1) % localThis.nSlots;
     localThis.slots[abs(head)].pushFront(elt);
     local { localThis.concurrentTasks.sub(1); }
     return true;
@@ -677,6 +677,8 @@ class DistributedDeque : Collection {
           if foundItem.read() {
             break;
           }
+
+          node = node.next;
         }
 
         // Release...
@@ -723,9 +725,16 @@ class DistributedDeque : Collection {
     }
 
     // Iterate over captured head nodes; each time we read them we advance them
+    var iterations = size;
     for i in head..#tail {
+      if iterations == 0 then break;
+      iterations -= 1;
+
       var idx = i % nSlots;
       var (size, headIdx, node) = nodes[idx];
+      if node == nil {
+        halt("Iterating over nil nodes, head: ", head, ", tail: ", tail, ", idx: ", i);
+      }
       yield node.elements[headIdx];
 
       // Update state...

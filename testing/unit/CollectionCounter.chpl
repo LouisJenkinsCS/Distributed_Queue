@@ -30,11 +30,7 @@ for i in 1 .. nElems {
 c.freeze();
 
 assert(c.size() == nElems);
-writeln("Add: Passed");
-
-// Test to see if it contains middle element
 assert(c.contains((nElems / 2) : int));
-writeln("Contains: Passed");
 
 // Iterate over the collection.
 var actual = 0;
@@ -43,7 +39,6 @@ for elem in c {
 }
 assert(actual == expected);
 assert(c.size() == nElems);
-writeln("Iteration: Passed");
 
 // Empty collection. Make sure all tasks start around same time...
 c.unfreeze();
@@ -67,5 +62,4 @@ coforall loc in Locales do on loc {
 
 assert(concurrentActual.read() == expected);
 assert(c.size() == 0 && c.isEmpty());
-writeln("Remove: Passed");
 writeln("SUCCESS");
