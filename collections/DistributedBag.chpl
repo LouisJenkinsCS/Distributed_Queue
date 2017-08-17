@@ -322,10 +322,9 @@ record BagSegment {
 
 /*
   We maintain a multiset 'bag' per node. Each bag keeps a handle to it's parent,
-  so it is advised for the user to use a bag directly, as it is also a Collection
-  in and of itself, as this avoids any communication inherent in accessing class fields.
+  which is required for work stealing.
 */
-class Bag : Collection {
+class Bag {
   // A handle to our parent 'distributed' bag, which is needed for work stealing.
   var parentHandle : DistributedBag(eltType);
 
@@ -344,11 +343,7 @@ class Bag : Collection {
   */
   var loadBalanceInProgress : atomic bool;
 
-  // To 'freeze' the bag, we must ensure that concurrent mutating operations finish
-  // first. However, at the same time we want to reduce communication by keeping
-  // a task counter for each node that can be checked at next to no cost.
-  var concurrentTasks : atomic uint;
-  var frozenState : atomic int;
+
 
   var maxParallelSegmentSpace = {0 .. #here.maxTaskPar};
   var segments : [maxParallelSegmentSpace] BagSegment(eltType);
@@ -359,66 +354,6 @@ class Bag : Collection {
 
   inline proc nextStartIdxDeq {
     return (startIdxDeq.fetchAdd(1) % here.maxTaskPar : uint) : int;
-  }
-
-  proc freeze() {
-    // Check if already frozen
-    if frozenState.read() == FREEZE_FROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in parentHandle.targetLocales do on loc {
-      var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_MARKED);
-      localBag.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as frozen...
-    coforall loc in parentHandle.targetLocales do on loc {
-      var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_FROZEN);
-    }
-
-    return true;
-  }
-
-  proc unfreeze() {
-    // Check if already unfrozen
-    if frozenState.read() == FREEZE_UNFROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in parentHandle.targetLocales do on loc {
-      var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_MARKED);
-      localBag.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as unfrozen...
-    coforall loc in parentHandle.targetLocales do on loc {
-      var localBag = parentHandle.getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_UNFROZEN);
-    }
-
-    return true;
-  }
-
-  proc canFreeze() : bool {
-    return true;
-  }
-
-  proc isFrozen() : bool {
-    var state = frozenState.read();
-
-    // Current transitioning state, wait it out...
-    while state == FREEZE_MARKED {
-      chpl_task_yield();
-      state = frozenState.read();
-    }
-
-    return state == FREEZE_FROZEN;
   }
 
   proc Bag(type eltType, parentHandle) {
@@ -735,6 +670,8 @@ class DistributedBag : Collection {
 
   // Node-local fields
   var bag : Bag(eltType);
+  var concurrentTasks : atomic uint;
+  var frozenState : atomic int;
 
   proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
     bag = new Bag(eltType, this);
@@ -761,10 +698,20 @@ class DistributedBag : Collection {
     return chpl_getPrivatizedCopy(this.type, pid);
   }
 
-  inline proc localBag {
-    return getPrivatizedThis.bag;
+  /*
+    Obtains a privatized version of this instance. The privatized version is a
+    cloned instance that is allocated on this node, which is useful for eliding
+    communications generated from accessing instance fields. Using another node's
+    instance will significantly penalize performance by bounding overall throughput
+    on the communication between the two nodes.
+  */
+  proc getPrivatizedInstance() {
+    return getPrivatizedThis;
   }
 
+  /*
+    
+  */
   proc add(elt : eltType) : bool {
     return localBag.add(elt);
   }
@@ -838,16 +785,68 @@ class DistributedBag : Collection {
     return size() == 0;
   }
 
-  proc freeze() : bool {
-    return localBag.freeze();
+  proc freeze() {
+    // Check if already frozen
+    if frozenState.read() == FREEZE_FROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      var localBag = getPrivatizedThis.bag;
+      localBag.frozenState.write(FREEZE_MARKED);
+      localBag.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as frozen...
+    coforall loc in targetLocales do on loc {
+      var localBag = getPrivatizedThis.bag;
+      localBag.frozenState.write(FREEZE_FROZEN);
+    }
+
+    return true;
   }
 
+  /*
+    Unfreezes our state, allowing mutating operations; we wait on any ongoing
+    concurrent operations to allow them to finish.
+  */
   proc unfreeze() : bool {
-    return localBag.unfreeze();
+    // Check if already unfrozen
+    if frozenState.read() == FREEZE_UNFROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as unfrozen...
+    coforall loc in parentHandle.targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_UNFROZEN);
+    }
+
+    return true;
+  }
+
+  proc canFreeze() : bool {
+    return true;
   }
 
   proc isFrozen() : bool {
-    return localBag.isFrozen();
+    var state = frozenState.read();
+
+    // Current transitioning state, wait it out...
+    while state == FREEZE_MARKED {
+      chpl_task_yield();
+      state = frozenState.read();
+    }
+
+    return state == FREEZE_FROZEN;
   }
 
   iter these() : eltType {
@@ -858,7 +857,7 @@ class DistributedBag : Collection {
     }
 
     for loc in targetLocales {
-      var targetBag : bag.type;
+      var targetBag : Bag(eltType);
       on loc do targetBag = localBag;
       for segmentIdx in 0..#here.maxTaskPar {
         ref segment = targetBag.segments[segmentIdx];
@@ -871,6 +870,21 @@ class DistributedBag : Collection {
           }
 
           block = block.next;
+        }
+      }
+    }
+  }
+
+  iter these(param tag : iterKind) where tag == iterKind.leader {
+    var isFrozen
+    coforall loc in targetLocales do on loc {
+      var targetBag : Bag(eltType);
+      coforall segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = targetBag.segments[segmentIdx];
+        if segment.nElems.read() == 0 then continue;
+
+        while !segment.isEmpty {
+          if segment.currentStatus ==
         }
       }
     }

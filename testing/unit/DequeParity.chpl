@@ -37,19 +37,15 @@ coforall loc in Locales do on loc {
   }
 }
 
-var isEven = true;
-for 1 .. totalElems {
+// Half of the numbers are even, the other half are odd... Concurrent remove
+// half, expecting it to be even, then the other half expecting it to be odd...
+forall 1 .. totalElems / 2 {
   var (hasElem, elem) = deque.popFront();
-  assert(hasElem);
-  if isEven {
-    if elem % 2 != 0 {
-      isEven = false;
-    }
-  }
-  // isOdd
-  else {
-      assert(elem % 2 != 0);
-  }
+  assert(hasElem && elem % 2 == 0);
+}
+forall i in 1 .. totalElems / 2 {
+  var (hasElem, elem) = deque.popFront();
+  assert(hasElem && elem % 2 != 0);
 }
 
 writeln("SUCCESS");

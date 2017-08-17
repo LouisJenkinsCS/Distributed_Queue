@@ -759,6 +759,14 @@ class DistributedDeque : Collection {
     }
   }
 
+  iter FIFO() {
+    halt("Not implemented...");
+  }
+
+  iter LIFO() {
+    halt("Not implemented...");
+  }
+
   iter these(param tag : iterKind) where tag == iterKind.leader {
     if !isFrozen() {
       halt("Iteration only supported while frozen...");
