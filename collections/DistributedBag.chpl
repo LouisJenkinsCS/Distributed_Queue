@@ -161,6 +161,35 @@ record BagSegment {
     return status.compareExchangeStrong(STATUS_UNLOCKED, newStatus);
   }
 
+  // Set status with a test-and-test-and-set loop...
+  inline proc acquire(newStatus) {
+    while true {
+      if currentStatus == STATUS_UNLOCKED && acquireWithStatus(newStatus) {
+        break;
+      }
+
+      chpl_task_yield();
+    }
+  }
+
+  // Set status with a test-and-test-and-set loop, but only while it is not empty...
+  inline proc acquireIfNonEmpty(newStatus) {
+    while !isEmpty {
+      if currentStatus == STATUS_UNLOCKED && acquireWithStatus(newStatus) {
+        if isEmpty {
+          releaseStatus();
+          return false;
+        } else {
+          return true;
+        }
+      }
+
+      chpl_task_yield();
+    }
+
+    return false;
+  }
+
   inline proc isUnlocked {
     return status.read() == STATUS_UNLOCKED;
   }
@@ -325,6 +354,8 @@ record BagSegment {
   which is required for work stealing.
 */
 class Bag {
+  type eltType;
+
   // A handle to our parent 'distributed' bag, which is needed for work stealing.
   var parentHandle : DistributedBag(eltType);
 
@@ -635,31 +666,6 @@ class Bag {
 
     halt("DEADCODE");
   }
-
-  // TODO: This is a lazy implementation that is not only slow, but it thrashes
-  // the entire data structure. After initial PR, if there is time, I'll come back
-  // to make this more efficient... it would be magnitudes faster, but no time currently.
-  proc clear() {
-    while remove()[1] do ;
-  }
-
-  proc size() : int {
-    return parentHandle.size();
-  }
-
-  proc isEmpty() : bool {
-    return parentHandle.isEmpty();
-  }
-
-  proc contains(elt : eltType) : bool {
-    return parentHandle.contains(elt);
-  }
-
-  iter these() : eltType {
-    for elt in parentHandle {
-      yield elt;
-    }
-  }
 }
 
 
@@ -695,6 +701,10 @@ class DistributedBag : Collection {
   }
 
   inline proc getPrivatizedThis {
+    if this.locale == here {
+      return this;
+    }
+
     return chpl_getPrivatizedCopy(this.type, pid);
   }
 
@@ -710,75 +720,58 @@ class DistributedBag : Collection {
   }
 
   /*
-    
+    Insert an element to this node's bag. The ordering is not guaranteed to be
+    preserved. If this instance is privatized, it is an entirely local operation.
   */
   proc add(elt : eltType) : bool {
-    return localBag.add(elt);
-  }
-
-  proc remove() : (bool, eltType) {
-    return localBag.remove();
+    return getPrivatizedThis.bag.add(elt);
   }
 
   /*
-    Obtain size of all segments across nodes.
+    Remove an element from this node's bag. The order in which elements are removed
+    are not guaranteed to be the same order it has been inserted. If this node's
+    bag is empty, it will attempt to steal elements from bags of other nodes.
+  */
+  proc remove() : (bool, eltType) {
+    return getPrivatizedThis.bag.remove();
+  }
+
+  /*
+    Obtain the number of elements held in all bags across all nodes. This method
+    is best-effort if the bags are unfrozen, and can be non-deterministic for
+    concurrent updates across nodes, and may miss elements or even count
+    duplicates resulting from any concurrent insertion or removal operations.
   */
   proc size() : int {
     var sz : atomic int;
     forall loc in targetLocales do on loc {
-      for segmentIdx in 0..#here.maxTaskPar {
-        sz.add(localBag.segments[segmentIdx].nElems.read() : int);
+      var instance = getPrivatizedThis;
+      forall segmentIdx in 0..#here.maxTaskPar {
+        sz.add(instance.segments[segmentIdx].nElems.read());
       }
     }
 
     return sz.read();
   }
 
-  // TODO: Improve this to be more concurrent and have a better code path for when
-  // the bag is frozen. If there is time after initial PR, I can do this.
+  /*
+    Performs a lookup to determine if the requested element exists in this bag.
+    This method is best-effort if the bags are unfrozen, and can be
+    non-deterministic for concurrent updates across nodes, and may miss elements
+    resulting from any concurrent insertion or removal operations.
+  */
   proc contains(elt : eltType) : bool {
     var foundElt : atomic bool;
-    forall loc in targetLocales do on loc {
-      var bag = localBag;
-      for segmentIdx in 0..#here.maxTaskPar {
-        if foundElt.read() then break;
-
-        ref segment = bag.segments[segmentIdx];
-
-        // Acquire...
-        while !segment.isEmpty {
-          if bag.isFrozen() || (segment.currentStatus == STATUS_UNLOCKED && segment.acquireWithStatus(STATUS_LOOKUP)) {
-            var block = segment.headBlock;
-            var targetElt = elt;
-            while block != nil {
-              for idx in 0 .. #block.size {
-                if block.elems[idx] == targetElt {
-                  foundElt.write(true);
-                  break;
-                }
-              }
-
-              if foundElt.read() {
-                break;
-              }
-
-              block = block.next;
-            }
-
-            if !bag.isFrozen() then segment.releaseStatus();
-            break;
-          }
-
-          chpl_task_yield();
-        }
+    forall elem in getPrivatizedThis {
+      if elem == elt {
+        foundElt.write(true);
       }
     }
-
     return foundElt.read();
   }
 
   proc clear() {
-    localBag.clear();
+    halt();
   }
 
   proc isEmpty() : bool {
@@ -825,7 +818,7 @@ class DistributedBag : Collection {
     }
 
     // Mark as unfrozen...
-    coforall loc in parentHandle.targetLocales do on loc {
+    coforall loc in targetLocales do on loc {
       var localThis = getPrivatizedThis;
       localThis.frozenState.write(FREEZE_UNFROZEN);
     }
@@ -852,41 +845,108 @@ class DistributedBag : Collection {
   iter these() : eltType {
     // Only allowed while frozen due to issue where breaking from a serial iterator
     // does not cleanup resources, leaving the bag in an undefined state.
-    if !localBag.isFrozen() {
-      halt("Serial Iteration only supported while frozen...");
-    }
+    var frozen = isFrozen();
 
     for loc in targetLocales {
-      var targetBag : Bag(eltType);
-      on loc do targetBag = localBag;
       for segmentIdx in 0..#here.maxTaskPar {
-        ref segment = targetBag.segments[segmentIdx];
-        if segment.nElems.read() == 0 then continue;
+        // The size of the snapshot is only known once we have the lock, and so
+        // we declare the variables for the buffer here to be updated once we know
+        // we have a segment.
+        var bufferSz : int;
+        var buffer : c_ptr(eltType);
+        var good = false;
+        on loc {
+          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+          // If the data structure is frozen, we elide the need to acquire any locks.
+          if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+            bufferSz = segment.nElems.read() : int;
+            good = true;
+          }
+        }
+        if !good then continue;
+        buffer = c_malloc(eltType, bufferSz);
 
-        var block = segment.headBlock;
-        while block != nil {
-          for idx in 0 .. #block.size {
-            yield block.elems[idx];
+        on loc {
+          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+          var sz = segment.nElems.read();
+
+          var block = segment.headBlock;
+          var bufferOffset = 0;
+          while block != nil {
+            if bufferOffset + block.size > bufferSz {
+              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+            }
+            __primitive("chpl_comm_array_put", block.elems[0], bufferSz.locale.id, buffer[bufferOffset], block.size);
+            bufferOffset += block.size;
+            block = block.next;
           }
 
-          block = block.next;
+          // Release the lock if we had to do so...
+          if !frozen then segment.releaseStatus();
         }
+
+        // Process this chunk if we have one...
+        if buffer == nil then continue;
+        for i in 0 .. #bufferSz {
+          yield buffer[i];
+        }
+        c_free(buffer);
       }
     }
   }
 
   iter these(param tag : iterKind) where tag == iterKind.leader {
-    var isFrozen
+    var frozen = isFrozen();
     coforall loc in targetLocales do on loc {
-      var targetBag : Bag(eltType);
+      var instance = getPrivatizedThis;
       coforall segmentIdx in 0 .. #here.maxTaskPar {
-        ref segment = targetBag.segments[segmentIdx];
-        if segment.nElems.read() == 0 then continue;
+        ref segment = instance.bag.segments[segmentIdx];
 
-        while !segment.isEmpty {
-          if segment.currentStatus ==
+        // If the data structure is frozen, we elide the need to acquire any locks.
+        if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+          // Create a snapshot...
+          var block = segment.headBlock;
+          var bufferSz = segment.nElems.read();
+          var buffer = c_malloc(eltType, bufferSz);
+          var bufferOffset = 0;
+
+          while block != nil {
+            if bufferOffset + block.size > bufferSz {
+              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+            }
+            __primitive("chpl_comm_array_put", block.elems[0], here.id, buffer[bufferOffset], block.size);
+            bufferOffset += block.size;
+            block = block.next;
+          }
+
+          // Release the lock if we had to do so...
+          if !frozen then segment.releaseStatus();
+
+          // Yield this chunk to be process...
+          yield (bufferSz, buffer);
+          c_free(buffer);
         }
       }
     }
   }
+
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+    var (bufferSz, buffer) = followThis;
+    for i in 0 .. #bufferSz {
+      yield buffer[i];
+    }
+  }
+}
+
+proc main() {
+  var bag = new DistributedBag(int);
+  coforall loc in Locales do on loc {
+    forall i in 1 .. 100 do bag.add(i);
+  }
+
+  for elem in bag do writeln(elem);
+  writeln("Serial done");
+  forall elem in bag do writeln(elem);
+  writeln("Parallel done");
+  writeln(+ reduce bag);
 }
