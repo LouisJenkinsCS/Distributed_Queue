@@ -676,7 +676,7 @@ class DistributedBag : Collection {
 
   // Node-local fields
   var bag : Bag(eltType);
-  var concurrentTasks : atomic uint;
+  var concurrentTasks : atomic int;
   var frozenState : atomic int;
 
   proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
@@ -771,14 +771,26 @@ class DistributedBag : Collection {
     return foundElt.read();
   }
 
+  /*
+    Clears all elements from all bags across nodes. It is equivalent to a sequence
+    of `remove` operations.
+  */
   proc clear() {
-    halt();
+    while remove()[1] do ;
   }
 
+  /*
+    If all bags are current empty. See `size` for notes on non-deterministic
+    behavior.
+  */
   proc isEmpty() : bool {
     return size() == 0;
   }
 
+  /*
+    Freeze our state, becoming immutable; we wait for any ongoing concurrent
+    operations to allow them to finish.
+  */
   proc freeze() {
     // Check if already frozen
     if frozenState.read() == FREEZE_FROZEN {
@@ -787,15 +799,15 @@ class DistributedBag : Collection {
 
     // Mark as transient state...
     coforall loc in targetLocales do on loc {
-      var localBag = getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_MARKED);
-      localBag.concurrentTasks.waitFor(0);
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
     }
 
     // Mark as frozen...
     coforall loc in targetLocales do on loc {
-      var localBag = getPrivatizedThis.bag;
-      localBag.frozenState.write(FREEZE_FROZEN);
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_FROZEN);
     }
 
     return true;
@@ -831,6 +843,10 @@ class DistributedBag : Collection {
     return true;
   }
 
+  /*
+    If we are currently frozen. If we are in the middle of a state transition, we
+    wait until it has completed.
+  */
   proc isFrozen() : bool {
     var state = frozenState.read();
 
@@ -843,7 +859,12 @@ class DistributedBag : Collection {
     return state == FREEZE_FROZEN;
   }
 
-  // TODO: Triggers a segmentation fault due to c_malloc???
+  /*
+    Iterate over each bag in each node. If the bag is frozen, we elide the need
+    to acquire any locks and iterate directly over the bag. If the bag is not
+    frozen, we must acquire not only the needed locks, but also take a snapshot
+    approach, increasing memory consumption.
+  */
   iter these() : eltType {
     // Only allowed while frozen due to issue where breaking from a serial iterator
     // does not cleanup resources, leaving the bag in an undefined state.
@@ -851,32 +872,53 @@ class DistributedBag : Collection {
 
     for loc in targetLocales {
       for segmentIdx in 0..#here.maxTaskPar {
-        // The size of the snapshot is only known once we have the lock, and so
-        // we declare the variables for the buffer here to be updated once we know
-        // we have a segment.
-        var dom : domain(1) = {0..-1};
-        var buffer : [dom] eltType;
 
-        on loc {
-          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
-          // If the data structure is frozen, we elide the need to acquire any locks.
-          if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
-            var block = segment.headBlock;
-            while block != nil {
-              for i in 0 .. #block.size {
-                  buffer.push_back(block.elems[i]);
-              }
-              block = block.next;
+        // If the data structure is frozen, we may elide the need to acquire any locks,
+        // and we can iterate directly over the data.
+        if frozen {
+          halt("Frozen Serial Iteration triggers some Chapel runtime bug...");
+          var instance : DistributedBag(int);
+          on loc do instance = getPrivatizedThis;
+          ref segment = instance.bag.segments[segmentIdx];
+          var block = segment.headBlock;
+
+          while block != nil {
+            for i in 0 .. #block.size {
+              writeln("Yielding: ", block.elems[i]);
+              yield block.elems[i];
+              writeln("Yielded...");
             }
-
-            // Release the lock if we had to do so...
-            if !frozen then segment.releaseStatus();
+            block = block.next;
           }
         }
+        // If the data structure is not frozen, then we must acquire the lock and
+        // produce a snapshot (to reduce the time we hold the lock)
+        else {
+          // The size of the snapshot is only known once we have the lock.
+          // TODO/BUG: c_ptr does not seem to work here and causes a segmentation fault at runtime.
+          var dom : domain(1) = {0..-1};
+          var buffer : [dom] eltType;
 
-        // Process this chunk if we have one...
-        for elem in buffer {
-          yield elem;
+          on loc {
+            ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+
+            if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+              var block = segment.headBlock;
+              while block != nil {
+                for i in 0 .. #block.size {
+                    buffer.push_back(block.elems[i]);
+                }
+                block = block.next;
+              }
+              segment.releaseStatus();
+
+            }
+          }
+
+          // Process this chunk if we have one...
+          for elem in buffer {
+            yield elem;
+          }
         }
       }
     }
@@ -889,11 +931,19 @@ class DistributedBag : Collection {
       coforall segmentIdx in 0 .. #here.maxTaskPar {
         ref segment = instance.bag.segments[segmentIdx];
 
-        // If the data structure is frozen, we elide the need to acquire any locks.
-        if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+        // If the data structure is frozen, we elide the need to acquire any locks,
+        // and we may iterate directly over the data as well.
+        if frozen {
+          var block = segment.headBlock;
+
+          while block != nil {
+            yield (block.size, block.elems);
+            block = block.next;
+          }
+        } else if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
           // Create a snapshot...
           var block = segment.headBlock;
-          var bufferSz = segment.nElems.read();
+          var bufferSz = segment.nElems.read() : int;
           var buffer = c_malloc(eltType, bufferSz);
           var bufferOffset = 0;
 
@@ -906,10 +956,8 @@ class DistributedBag : Collection {
             block = block.next;
           }
 
-          // Release the lock if we had to do so...
-          if !frozen then segment.releaseStatus();
-
           // Yield this chunk to be process...
+          segment.releaseStatus();
           yield (bufferSz, buffer);
           c_free(buffer);
         }
