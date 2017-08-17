@@ -848,41 +848,40 @@ class DistributedBag : Collection {
     var frozen = isFrozen();
 
     for loc in targetLocales {
+      var instance : DistributedBag(eltType);
+      on loc do instance = getPrivatizedThis;
       for segmentIdx in 0..#here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+
         // The size of the snapshot is only known once we have the lock, and so
         // we declare the variables for the buffer here to be updated once we know
         // we have a segment.
         var bufferSz : int;
         var buffer : c_ptr(eltType);
-        var good = false;
+
         on loc {
-          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
           // If the data structure is frozen, we elide the need to acquire any locks.
           if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
-            bufferSz = segment.nElems.read() : int;
-            good = true;
-          }
-        }
-        if !good then continue;
-        buffer = c_malloc(eltType, bufferSz);
-
-        on loc {
-          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
-          var sz = segment.nElems.read();
-
-          var block = segment.headBlock;
-          var bufferOffset = 0;
-          while block != nil {
-            if bufferOffset + block.size > bufferSz {
-              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+            // Create buffer...
+            on buffer {
+              bufferSz = segment.nElems.read() : int;
+              buffer = c_malloc(eltType, bufferSz);
             }
-            __primitive("chpl_comm_array_put", block.elems[0], bufferSz.locale.id, buffer[bufferOffset], block.size);
-            bufferOffset += block.size;
-            block = block.next;
-          }
 
-          // Release the lock if we had to do so...
-          if !frozen then segment.releaseStatus();
+            var block = segment.headBlock;
+            var bufferOffset = 0;
+            while block != nil {
+              if bufferOffset + block.size > bufferSz {
+                halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+              }
+              __primitive("chpl_comm_array_put", block.elems[0], buffer.locale.id, buffer[bufferOffset], block.size);
+              bufferOffset += block.size;
+              block = block.next;
+            }
+
+            // Release the lock if we had to do so...
+            if !frozen then segment.releaseStatus();
+          }
         }
 
         // Process this chunk if we have one...
@@ -945,8 +944,6 @@ proc main() {
   }
 
   for elem in bag do writeln(elem);
-  writeln("Serial done");
   forall elem in bag do writeln(elem);
-  writeln("Parallel done");
   writeln(+ reduce bag);
 }
