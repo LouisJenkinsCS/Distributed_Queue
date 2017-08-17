@@ -672,7 +672,7 @@ class Bag {
 class DistributedBag : Collection {
   var targetLocDom : domain(1);
   var targetLocales : [targetLocDom] locale;
-  var pid : int;
+  var pid : int = -1;
 
   // Node-local fields
   var bag : Bag(eltType);
@@ -686,14 +686,15 @@ class DistributedBag : Collection {
     pid = _newPrivatizedClass(this);
   }
 
-  proc DistributedBag(other, privData, type eltType = other.eltType) {
+  proc DistributedBag(other, pid, type eltType = other.eltType) {
     bag = new Bag(eltType, this);
     this.targetLocDom = other.targetLocDom;
     this.targetLocales = other.targetLocales;
+    this.pid = pid;
   }
 
-  proc dsiPrivatize(privData) {
-    return new DistributedBag(this, privData);
+  proc dsiPrivatize(pid) {
+    return new DistributedBag(this, pid);
   }
 
   proc dsiGetPrivatizeData() {
@@ -842,40 +843,29 @@ class DistributedBag : Collection {
     return state == FREEZE_FROZEN;
   }
 
+  // TODO: Triggers a segmentation fault due to c_malloc???
   iter these() : eltType {
     // Only allowed while frozen due to issue where breaking from a serial iterator
     // does not cleanup resources, leaving the bag in an undefined state.
     var frozen = isFrozen();
 
     for loc in targetLocales {
-      var instance : DistributedBag(eltType);
-      on loc do instance = getPrivatizedThis;
       for segmentIdx in 0..#here.maxTaskPar {
-        ref segment = instance.bag.segments[segmentIdx];
-
         // The size of the snapshot is only known once we have the lock, and so
         // we declare the variables for the buffer here to be updated once we know
         // we have a segment.
-        var bufferSz : int;
-        var buffer : c_ptr(eltType);
+        var dom : domain(1) = {0..-1};
+        var buffer : [dom] eltType;
 
         on loc {
+          ref segment = getPrivatizedThis.bag.segments[segmentIdx];
           // If the data structure is frozen, we elide the need to acquire any locks.
           if frozen || segment.acquireIfNonEmpty(STATUS_LOOKUP) {
-            // Create buffer...
-            on buffer {
-              bufferSz = segment.nElems.read() : int;
-              buffer = c_malloc(eltType, bufferSz);
-            }
-
             var block = segment.headBlock;
-            var bufferOffset = 0;
             while block != nil {
-              if bufferOffset + block.size > bufferSz {
-                halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+              for i in 0 .. #block.size {
+                  buffer.push_back(block.elems[i]);
               }
-              __primitive("chpl_comm_array_put", block.elems[0], buffer.locale.id, buffer[bufferOffset], block.size);
-              bufferOffset += block.size;
               block = block.next;
             }
 
@@ -885,11 +875,9 @@ class DistributedBag : Collection {
         }
 
         // Process this chunk if we have one...
-        if buffer == nil then continue;
-        for i in 0 .. #bufferSz {
-          yield buffer[i];
+        for elem in buffer {
+          yield elem;
         }
-        c_free(buffer);
       }
     }
   }
@@ -935,15 +923,4 @@ class DistributedBag : Collection {
       yield buffer[i];
     }
   }
-}
-
-proc main() {
-  var bag = new DistributedBag(int);
-  coforall loc in Locales do on loc {
-    forall i in 1 .. 100 do bag.add(i);
-  }
-
-  for elem in bag do writeln(elem);
-  forall elem in bag do writeln(elem);
-  writeln(+ reduce bag);
 }
