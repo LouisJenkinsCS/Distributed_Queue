@@ -876,7 +876,7 @@ class DistributedBag : Collection {
         // If the data structure is frozen, we may elide the need to acquire any locks,
         // and we can iterate directly over the data.
         if frozen {
-          halt("Frozen Serial Iteration triggers some Chapel runtime bug...");
+          /*halt("Frozen Serial Iteration triggers some Chapel runtime bug...");*/
           var instance : DistributedBag(int);
           on loc do instance = getPrivatizedThis;
           ref segment = instance.bag.segments[segmentIdx];
@@ -884,9 +884,9 @@ class DistributedBag : Collection {
 
           while block != nil {
             for i in 0 .. #block.size {
-              writeln("Yielding: ", block.elems[i]);
-              yield block.elems[i];
-              writeln("Yielded...");
+              var elt : eltType;
+              on loc do elt = block.elems[i];
+              yield elt;
             }
             block = block.next;
           }

@@ -61,7 +61,7 @@ proc main() {
   // DistributedBag - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
-        var c = (bd.userData : DistributedBag(int)).localBag;
+        var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
         for i in 1 .. bd.iterations {
           c.add(i);
         }
