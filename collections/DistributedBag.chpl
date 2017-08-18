@@ -49,6 +49,7 @@ private const STATUS_UNLOCKED : uint = 0;
 private const STATUS_ADD : uint = 1;
 private const STATUS_REMOVE : uint = 2;
 private const STATUS_LOOKUP : uint = 3;
+private const STATUS_BALANCE : uint = 4;
 
 /*
   Below are statuses specific to the work stealing algorithm.
@@ -911,6 +912,93 @@ class DistributedBag : Collection {
     }
 
     return state == FREEZE_FROZEN;
+  }
+
+  /*
+    Clear all bags across all nodes in a best-effort approach. Elements added or
+    moved around from concurrent additions or removals (including work stealing)
+    may be missed while clearing.
+  */
+  proc clear() {
+    var localThis = getPrivatizedThis;
+    if !BAG_NO_FREEZE {
+      local {
+        localThis.concurrentTasks.add(1);
+
+        // Check if the queue is now 'immutable'.
+        if localThis.frozenState.read() > FREEZE_UNFROZEN {
+          localThis.concurrentTasks.sub(1);
+          return;
+        }
+      }
+    }
+
+    coforall loc in instance.targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      forall segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+        if segment.acquireIfNonEmpty(STATUS_REMOVE) {
+          var block = segment.headBlock;
+          while block != nil {
+            var tmp = block;
+            block = block.next;
+            delete tmp;
+          }
+
+          segment.headBlock = nil;
+          segment.tailBlock = nil;
+          segment.nElems.write(0);
+          segment.releaseStatus();
+        }
+      }
+    }
+
+    localThis.concurrentTasks.sub(1);
+  }
+
+  /*
+    Triggers a more static approach to load balancing; note that this operation
+    is parallel-safe but is performed in parallel across all `targetLocales` and
+    should only be called at a point of synchronization.
+  */
+  proc balance() {
+    var localThis = getPrivatizedThis;
+    if !BAG_NO_FREEZE {
+      local {
+        localThis.concurrentTasks.add(1);
+
+        // Check if the queue is now 'immutable'.
+        if localThis.frozenState.read() > FREEZE_UNFROZEN {
+          localThis.concurrentTasks.sub(1);
+          return;
+        }
+      }
+    }
+
+    // Phase 1: Acquire all locks from from first node and segment to last
+    // node and segment (our global locking order...)
+    for loc in localThis.targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      for segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+        segment.acquire(STATUS_BALANCE);
+      }
+    }
+
+    // Phase 2: Obtain the average of all elements held in a horizontal segment...
+    var elemsPerSegment : [0..#here.maxTaskPar] int;
+    coforall segmentIdx in 0 .. #here.maxTaskPar {
+      for loc in localThis.targetLocales do on loc {
+        elemsPerSegment[segmentIdx] += getPrivatizedThis.bag.segments[segmentIdx].nElems.read() : int;
+      }
+    }
+    for elem in elemsPerSegment do elem /= here.maxTaskPar;
+
+    // Phase 3: Take elements from segments who have more...
+
+    // Phase 4: Give elements to segments who have less...
+
+    // Phase 5: Release all locks from first node and segment to last node and segment.
   }
 
   /*
