@@ -85,6 +85,7 @@ config param INITIAL_BLOCK_SIZE = 1024;
 // bulk transfer, measured in megabytes.
 config param WORK_STEALING_RATIO = 0.25;
 config param WORK_STEALING_MAX_MEMORY_MB : real = 1.0;
+config param BAG_NO_FREEZE = false;
 
 /*
   A segment block is an unrolled linked list node that holds a contiguous buffer
@@ -599,7 +600,7 @@ class Bag {
                       if loc != here then on loc {
                         // As we jumped to the target node, 'localBag' returns
                         // the target's bag that we are attempting to steal from.
-                        var targetBag = parentHandle.localBag;
+                        var targetBag = parentHandle.bag;
 
                         // Only proceed if the target is not load balancing themselves...
                         if !targetBag.loadBalanceInProgress.read() {
@@ -748,6 +749,8 @@ class DistributedBag : Collection {
   */
   proc add(elt : eltType) : bool {
     var localThis = getPrivatizedThis;
+    if BAG_NO_FREEZE then return localThis.bag.add(elt);
+
     local {
       localThis.concurrentTasks.add(1);
 
@@ -757,7 +760,10 @@ class DistributedBag : Collection {
         return false;
       }
     }
-    return getPrivatizedThis.bag.add(elt);
+
+    var result = localThis.bag.add(elt);
+    local { localThis.concurrentTasks.sub(1); }
+    return result;
   }
 
   /*
@@ -767,6 +773,8 @@ class DistributedBag : Collection {
   */
   proc remove() : (bool, eltType) {
     var localThis = getPrivatizedThis;
+    if BAG_NO_FREEZE then return localThis.bag.remove();
+
     local {
       localThis.concurrentTasks.add(1);
 
@@ -776,7 +784,10 @@ class DistributedBag : Collection {
         return (false, _defaultOf(eltType));
       }
     }
-    return getPrivatizedThis.bag.remove();
+
+    var (elem, hasElem) = localThis.bag.remove();
+    local { localThis.concurrentTasks.sub(1); }
+    return (elem, hasElem);
   }
 
   /*
@@ -790,7 +801,7 @@ class DistributedBag : Collection {
     forall loc in targetLocales do on loc {
       var instance = getPrivatizedThis;
       forall segmentIdx in 0..#here.maxTaskPar {
-        sz.add(instance.segments[segmentIdx].nElems.read());
+        sz.add(instance.bag.segments[segmentIdx].nElems.read() : int);
       }
     }
 
@@ -834,6 +845,8 @@ class DistributedBag : Collection {
     operations to allow them to finish.
   */
   proc freeze() {
+    if BAG_NO_FREEZE then return false;
+
     // Check if already frozen
     if frozenState.read() == FREEZE_FROZEN {
       return true;
@@ -860,6 +873,7 @@ class DistributedBag : Collection {
     concurrent operations to allow them to finish.
   */
   proc unfreeze() : bool {
+    if BAG_NO_FREEZE then return false;
     // Check if already unfrozen
     if frozenState.read() == FREEZE_UNFROZEN {
       return true;
@@ -882,7 +896,7 @@ class DistributedBag : Collection {
   }
 
   proc canFreeze() : bool {
-    return true;
+    return !BAG_NO_FREEZE;
   }
 
   /*
@@ -890,6 +904,8 @@ class DistributedBag : Collection {
     wait until it has completed.
   */
   proc isFrozen() : bool {
+    if BAG_NO_FREEZE then return false;
+
     var state = frozenState.read();
 
     // Current transitioning state, wait it out...
@@ -918,7 +934,6 @@ class DistributedBag : Collection {
         // If the data structure is frozen, we may elide the need to acquire any locks,
         // and we can iterate directly over the data.
         if frozen {
-          /*halt("Frozen Serial Iteration triggers some Chapel runtime bug...");*/
           var instance : DistributedBag(int);
           on loc do instance = getPrivatizedThis;
           ref segment = instance.bag.segments[segmentIdx];

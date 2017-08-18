@@ -27,7 +27,7 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedDeque",
       plotter = plotter,
-      benchTime = 10,
+      benchTime = 1,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedDeque(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
@@ -41,7 +41,7 @@ proc main() {
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "SynchronizedList",
-      benchTime = 10,
+      benchTime = 1,
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new SynchronizedList(int);
@@ -62,7 +62,7 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedBag - Imbalanced",
       plotter = plotter,
-      benchTime = 10,
+      benchTime = 1,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
@@ -82,7 +82,7 @@ proc main() {
       targetLocales=targetLocales,
       benchName = "DistributedBag - Balanced",
       plotter = plotter,
-      benchTime = 10,
+      benchTime = 1,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
         coforall loc in bmd.targetLocales do on loc {

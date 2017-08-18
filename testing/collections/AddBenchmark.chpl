@@ -22,7 +22,7 @@ proc main() {
   // DistributedBoundedQueue - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
-      benchTime = 10,
+      benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "DistributedDeque - Bounded",
@@ -35,7 +35,7 @@ proc main() {
   // DistributedQueue - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
-      benchTime = 10,
+      benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "DistributedDeque",
@@ -48,7 +48,7 @@ proc main() {
   // SynchronizedList - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
-      benchTime = 10,
+      benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "SynchronizedList",
@@ -66,7 +66,7 @@ proc main() {
           c.add(i);
         }
       },
-      benchTime = 10,
+      benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "DistributedBag",
