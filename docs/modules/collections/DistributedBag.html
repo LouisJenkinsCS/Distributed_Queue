@@ -1,0 +1,350 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>DistributedBag &mdash; chpldoc 0.0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="chpldoc 0.0.1 documentation" href="../../index.html"/>
+        <link rel="next" title="DistributedDeque" href="DistributedDeque.html"/>
+        <link rel="prev" title="Collection" href="Collection.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> chpldoc
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../index.html">chpldoc documentation</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Collection.html">Collection</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="">DistributedBag</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DistributedDeque.html">DistributedDeque</a></li>
+<li class="toctree-l1"><a class="reference internal" href="SynchronizedList.html">SynchronizedList</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../../index.html">chpldoc</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+      
+    <li>DistributedBag</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../_sources/modules/collections/DistributedBag.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <span class="target" id="module-DistributedBag"></span><div class="section" id="distributedbag">
+<h1>DistributedBag<a class="headerlink" href="#distributedbag" title="Permalink to this headline">¶</a></h1>
+<p><strong>Usage</strong></p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">use</span> <span class="nx">DistributedBag</span><span class="p">;</span>
+</pre></div>
+</div>
+<dl class="data">
+<dt id="DistributedBag.INITIAL_BLOCK_SIZE">
+<em class="property">config param </em><code class="descname">INITIAL_BLOCK_SIZE</code> = 1024<a class="headerlink" href="#DistributedBag.INITIAL_BLOCK_SIZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The initial amount of elements in an unroll block. Each successive unroll block
+is double the size of it&#8217;s predecessor.</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="DistributedBag.WORK_STEALING_RATIO">
+<em class="property">config param </em><code class="descname">WORK_STEALING_RATIO</code> = 0.25<a class="headerlink" href="#DistributedBag.WORK_STEALING_RATIO" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="data">
+<dt id="DistributedBag.WORK_STEALING_MAX_MEMORY_MB">
+<em class="property">config param </em><code class="descname">WORK_STEALING_MAX_MEMORY_MB</code>: real = 1.0<a class="headerlink" href="#DistributedBag.WORK_STEALING_MAX_MEMORY_MB" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="data">
+<dt id="DistributedBag.BAG_NO_FREEZE">
+<em class="property">config param </em><code class="descname">BAG_NO_FREEZE</code> = false<a class="headerlink" href="#DistributedBag.BAG_NO_FREEZE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="data">
+<dt id="DistributedBag.WORK_STEALING_MINIMUM">
+<em class="property">config param </em><code class="descname">WORK_STEALING_MINIMUM</code> = 1<a class="headerlink" href="#DistributedBag.WORK_STEALING_MINIMUM" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="DistributedBag.DistributedBag">
+<em class="property">class </em><code class="descname">DistributedBag</code>: Collection<a class="headerlink" href="#DistributedBag.DistributedBag" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="attribute">
+<dt id="DistributedBag.DistributedBag.targetLocDom">
+<em class="property">var </em><code class="descname">targetLocDom</code>: domain(1)<a class="headerlink" href="#DistributedBag.DistributedBag.targetLocDom" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="DistributedBag.DistributedBag.targetLocales">
+<em class="property">var </em><code class="descname">targetLocales</code>: [targetLocDom] locale<a class="headerlink" href="#DistributedBag.DistributedBag.targetLocales" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.DistributedBag">
+<em class="property">proc </em><code class="descname">DistributedBag</code><span class="sig-paren">(</span><em>type eltType</em>, <em>targetLocales: [?targetLocDom] locale = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedBag.DistributedBag.DistributedBag" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.getPrivatizedInstance">
+<em class="property">proc </em><code class="descname">getPrivatizedInstance</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedBag.DistributedBag.getPrivatizedInstance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Obtains a privatized version of this instance. The privatized version is a
+cloned instance that is allocated on this node, which is useful for eliding
+communications generated from accessing instance fields. Using another node&#8217;s
+instance will significantly penalize performance by bounding overall throughput
+on the communication between the two nodes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.add">
+<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.add" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert an element to this node&#8217;s bag. The ordering is not guaranteed to be
+preserved. If this instance is privatized, it is an entirely local operation.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.remove">
+<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedBag.DistributedBag.remove" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove an element from this node&#8217;s bag. The order in which elements are removed
+are not guaranteed to be the same order it has been inserted. If this node&#8217;s
+bag is empty, it will attempt to steal elements from bags of other nodes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.size">
+<em class="property">proc </em><code class="descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#DistributedBag.DistributedBag.size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Obtain the number of elements held in all bags across all nodes. This method
+is best-effort if the bags are unfrozen, and can be non-deterministic for
+concurrent updates across nodes, and may miss elements or even count
+duplicates resulting from any concurrent insertion or removal operations.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.contains">
+<em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.contains" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a lookup to determine if the requested element exists in this bag.
+This method is best-effort if the bags are unfrozen, and can be
+non-deterministic for concurrent updates across nodes, and may miss elements
+resulting from any concurrent insertion or removal operations.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.freeze">
+<em class="property">proc </em><code class="descname">freeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedBag.DistributedBag.freeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Freeze our state, becoming immutable; we wait for any ongoing concurrent
+operations to allow them to finish.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.unfreeze">
+<em class="property">proc </em><code class="descname">unfreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.unfreeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unfreezes our state, allowing mutating operations; we wait on any ongoing
+concurrent operations to allow them to finish.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.canFreeze">
+<em class="property">proc </em><code class="descname">canFreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.canFreeze" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.isFrozen">
+<em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.isFrozen" title="Permalink to this definition">¶</a></dt>
+<dd><p>If we are currently frozen. If we are in the middle of a state transition, we
+wait until it has completed.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt id="DistributedBag.DistributedBag.these">
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedBag.DistributedBag.these" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate over each bag in each node. If the bag is frozen, we elide the need
+to acquire any locks and iterate directly over the bag. If the bag is not
+frozen, we must acquire not only the needed locks, but also take a snapshot
+approach, increasing memory consumption.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="DistributedDeque.html" class="btn btn-neutral float-right" title="DistributedDeque" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="Collection.html" class="btn btn-neutral" title="Collection" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2015, .
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'0.0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+  
+ 
+
+
+
+</body>
+</html>

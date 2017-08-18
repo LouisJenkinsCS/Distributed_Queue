@@ -85,14 +85,9 @@
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="modules/collections/Collection.html">Collection</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/Collection/List.html">List</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/Collection/Queue.html">Queue</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/Collection/Stack.html">Stack</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/DistributedBoundedQueue.html">DistributedBoundedQueue</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/DistributedList.html">DistributedList</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/DistributedQueue.html">DistributedQueue</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules/collections/DistributedBag.html">DistributedBag</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules/collections/DistributedDeque.html">DistributedDeque</a></li>
 <li class="toctree-l1"><a class="reference internal" href="modules/collections/SynchronizedList.html">SynchronizedList</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules/collections/SynchronizedQueue.html">SynchronizedQueue</a></li>
 </ul>
 
             
@@ -144,25 +139,38 @@
  | <a href="#C"><strong>C</strong></a>
  | <a href="#D"><strong>D</strong></a>
  | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
  | <a href="#I"><strong>I</strong></a>
  | <a href="#L"><strong>L</strong></a>
- | <a href="#Q"><strong>Q</strong></a>
+ | <a href="#N"><strong>N</strong></a>
+ | <a href="#P"><strong>P</strong></a>
  | <a href="#R"><strong>R</strong></a>
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#W"><strong>W</strong></a>
  
 </div>
 <h2 id="A">A</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection.html#Collection.Collection.add">add() (Collection.Collection method)</a>, <a href="modules/collections/Collection.html#Collection.Collection.add">[1]</a>, <a href="modules/collections/Collection.html#Collection.Collection.add">[2]</a>
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.add">add() (Collection.Collection method)</a>
   </dt>
 
       <dd><dl>
         
-  <dt><a href="modules/collections/Collection/List.html#List.IndexableList.add">(List.IndexableList method)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.add">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.add">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList.add">(SynchronizedList.SynchronizedList method)</a>
   </dt>
 
       </dl></dd>
@@ -173,17 +181,7 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.BoundedList">BoundedList (class in List)</a>
-  </dt>
-
-      
-  <dt><a href="modules/collections/Collection/Queue.html#Queue.BoundedQueue">BoundedQueue (class in Queue)</a>
-  </dt>
-
-  </dl></td>
-  <td style="width: 33%" valign="top"><dl>
-      
-  <dt><a href="modules/collections/Collection/Stack.html#Stack.BoundedStack">BoundedStack (class in Stack)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.BAG_NO_FREEZE">BAG_NO_FREEZE (in module DistributedBag)</a>
   </dt>
 
   </dl></td>
@@ -193,19 +191,23 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.BoundedList.capacity">capacity() (List.BoundedList method)</a>
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.canFreeze">canFreeze() (Collection.Collection method)</a>
   </dt>
 
       <dd><dl>
         
-  <dt><a href="modules/collections/Collection/Queue.html#Queue.BoundedQueue.capacity">(Queue.BoundedQueue method)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.canFreeze">(DistributedBag.DistributedBag method)</a>
   </dt>
 
         
-  <dt><a href="modules/collections/Collection/Stack.html#Stack.BoundedStack.capacity">(Stack.BoundedStack method)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.canFreeze">(DistributedDeque.DistributedDeque method)</a>
   </dt>
 
       </dl></dd>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.cap">cap (DistributedDeque.DistributedDeque attribute)</a>
+  </dt>
+
       
   <dt><a href="modules/collections/Collection.html#Collection.Collection.clear">clear() (Collection.Collection method)</a>
   </dt>
@@ -226,6 +228,16 @@
   <dt><a href="modules/collections/Collection.html#Collection.Collection.contains">contains() (Collection.Collection method)</a>
   </dt>
 
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.contains">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.contains">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      </dl></dd>
   </dl></td>
 </tr></table>
 
@@ -233,47 +245,49 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/DistributedBoundedQueue.html#DistributedBoundedQueue.DistributedBoundedQueue">DistributedBoundedQueue (class in DistributedBoundedQueue)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.deinit">deinit() (DistributedDeque.DistributedDeque method)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/DistributedBoundedQueue.html#module-DistributedBoundedQueue">(module)</a>
-  </dt>
-
-      </dl></dd>
       
-  <dt><a href="modules/collections/DistributedList.html#DistributedList.DistributedList">DistributedList (class in DistributedList)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DEQUE_BLOCK_SIZE">DEQUE_BLOCK_SIZE (in module DistributedDeque)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/DistributedList.html#module-DistributedList">(module)</a>
-  </dt>
-
-      </dl></dd>
       
-  <dt><a href="modules/collections/DistributedQueue.html#DistributedQueue.DistributedQueue">DistributedQueue (class in DistributedQueue)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DEQUE_NO_FREEZE">DEQUE_NO_FREEZE (in module DistributedDeque)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/DistributedQueue.html#module-DistributedQueue">(module)</a>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.dequeue">dequeue() (DistributedDeque.DistributedDeque method)</a>
   </dt>
 
-      </dl></dd>
   </dl></td>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.DynamicBoundedList">DynamicBoundedList (class in List)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag">DistributedBag (class in DistributedBag)</a>
+  </dt>
+
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#module-DistributedBag">(module)</a>
+  </dt>
+
+      </dl></dd>
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.DistributedBag">DistributedBag() (DistributedBag.DistributedBag method)</a>
   </dt>
 
       
-  <dt><a href="modules/collections/Collection/Queue.html#Queue.DynamicBoundedQueue">DynamicBoundedQueue (class in Queue)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque">DistributedDeque (class in DistributedDeque)</a>
   </dt>
 
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedDeque.html#module-DistributedDeque">(module)</a>
+  </dt>
+
+      </dl></dd>
       
-  <dt><a href="modules/collections/Collection/Stack.html#Stack.DynamicBoundedStack">DynamicBoundedStack (class in Stack)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.DistributedDeque">DistributedDeque() (DistributedDeque.DistributedDeque method)</a>
   </dt>
 
   </dl></td>
@@ -283,9 +297,51 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedListNode.elt">elt (SynchronizedList.SynchronizedListNode attribute)</a>
+  </dt>
+
+      
   <dt><a href="modules/collections/Collection.html#Collection.Collection.eltType">eltType (Collection.Collection attribute)</a>
   </dt>
 
+      <dd><dl>
+        
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedListNode.eltType">(SynchronizedList.SynchronizedListNode attribute)</a>
+  </dt>
+
+      </dl></dd>
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.enqueue">enqueue() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+  </dl></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.FIFO">FIFO() (DistributedDeque.DistributedDeque iterator)</a>
+  </dt>
+
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.freeze">freeze() (Collection.Collection method)</a>
+  </dt>
+
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.freeze">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.freeze">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      </dl></dd>
   </dl></td>
 </tr></table>
 
@@ -293,7 +349,17 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.IndexableList.get">get() (List.IndexableList method)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.getPrivatizedInstance">getPrivatizedInstance() (DistributedBag.DistributedBag method)</a>
+  </dt>
+
+  </dl></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList.head">head (SynchronizedList.SynchronizedList attribute)</a>
   </dt>
 
   </dl></td>
@@ -303,19 +369,29 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.IndexableList">IndexableList (class in List)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.INITIAL_BLOCK_SIZE">INITIAL_BLOCK_SIZE (in module DistributedBag)</a>
   </dt>
 
       
-  <dt><a href="modules/collections/Collection/List.html#List.IndexableList.indexOf">indexOf() (List.IndexableList method)</a>
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.isEmpty">isEmpty() (Collection.Collection method)</a>
   </dt>
 
   </dl></td>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection.html#Collection.Collection.isEmpty">isEmpty() (Collection.Collection method)</a>
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.isFrozen">isFrozen() (Collection.Collection method)</a>
   </dt>
 
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.isFrozen">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.isFrozen">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      </dl></dd>
   </dl></td>
 </tr></table>
 
@@ -323,31 +399,57 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/List.html#List.List">List (class in List)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.LIFO">LIFO() (DistributedDeque.DistributedDeque iterator)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/Collection/List.html#module-List">(module)</a>
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList.lock$">lock$ (SynchronizedList.SynchronizedList attribute)</a>
   </dt>
 
-      </dl></dd>
   </dl></td>
 </tr></table>
 
-<h2 id="Q">Q</h2>
+<h2 id="N">N</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection/Queue.html#Queue.Queue">Queue (class in Queue)</a>
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedListNode.next">next (SynchronizedList.SynchronizedListNode attribute)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/Collection/Queue.html#module-Queue">(module)</a>
+  </dl></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.pop">pop() (DistributedDeque.DistributedDeque method)</a>
   </dt>
 
-      </dl></dd>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.popBack">popBack() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.popFront">popFront() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.push">push() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.pushBack">pushBack() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.pushFront">pushFront() (DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
   </dl></td>
 </tr></table>
 
@@ -355,26 +457,20 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/Collection.html#Collection.Collection.remove">remove() (Collection.Collection method)</a>, <a href="modules/collections/Collection.html#Collection.Collection.remove">[1]</a>
-  </dt>
-
-      
-  <dt><a href="modules/collections/Collection.html#Collection.Collection.removeItem">removeItem() (Collection.Collection method)</a>
-  </dt>
-
-  </dl></td>
-  <td style="width: 33%" valign="top"><dl>
-      
-  <dt><a href="modules/collections/Collection/List.html#List.DynamicBoundedList.resize">resize() (List.DynamicBoundedList method)</a>
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.remove">remove() (Collection.Collection method)</a>
   </dt>
 
       <dd><dl>
         
-  <dt><a href="modules/collections/Collection/Queue.html#Queue.DynamicBoundedQueue.resize">(Queue.DynamicBoundedQueue method)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.remove">(DistributedBag.DistributedBag method)</a>
   </dt>
 
         
-  <dt><a href="modules/collections/Collection/Stack.html#Stack.DynamicBoundedStack.resize">(Stack.DynamicBoundedStack method)</a>
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.remove">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList.remove">(SynchronizedList.SynchronizedList method)</a>
   </dt>
 
       </dl></dd>
@@ -388,22 +484,16 @@
   <dt><a href="modules/collections/Collection.html#Collection.Collection.size">size() (Collection.Collection method)</a>
   </dt>
 
-      
-  <dt><a href="modules/collections/Collection/Stack.html#Stack.Stack">Stack (class in Stack)</a>
-  </dt>
-
       <dd><dl>
         
-  <dt><a href="modules/collections/Collection/Stack.html#module-Stack">(module)</a>
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.size">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.size">(DistributedDeque.DistributedDeque method)</a>
   </dt>
 
       </dl></dd>
-      
-  <dt><a href="modules/collections/Collection/List.html#List.IndexableList.subList">subList() (List.IndexableList method)</a>
-  </dt>
-
-  </dl></td>
-  <td style="width: 33%" valign="top"><dl>
       
   <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList">SynchronizedList (class in SynchronizedList)</a>
   </dt>
@@ -414,16 +504,12 @@
   </dt>
 
       </dl></dd>
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
       
-  <dt><a href="modules/collections/SynchronizedQueue.html#SynchronizedQueue.SynchronizedQueue">SynchronizedQueue (class in SynchronizedQueue)</a>
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedListNode">SynchronizedListNode (class in SynchronizedList)</a>
   </dt>
 
-      <dd><dl>
-        
-  <dt><a href="modules/collections/SynchronizedQueue.html#module-SynchronizedQueue">(module)</a>
-  </dt>
-
-      </dl></dd>
   </dl></td>
 </tr></table>
 
@@ -431,7 +517,77 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%" valign="top"><dl>
       
+  <dt><a href="modules/collections/SynchronizedList.html#SynchronizedList.SynchronizedList.tail">tail (SynchronizedList.SynchronizedList attribute)</a>
+  </dt>
+
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.targetLocales">targetLocales (DistributedBag.DistributedBag attribute)</a>
+  </dt>
+
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.targetLocales">(DistributedDeque.DistributedDeque attribute)</a>
+  </dt>
+
+      </dl></dd>
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.targetLocDom">targetLocDom (DistributedBag.DistributedBag attribute)</a>
+  </dt>
+
+      
   <dt><a href="modules/collections/Collection.html#Collection.Collection.these">these() (Collection.Collection iterator)</a>
+  </dt>
+
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.these">(DistributedBag.DistributedBag iterator)</a>, <a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.these">[1]</a>, <a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.these">[2]</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.these">(DistributedDeque.DistributedDeque iterator)</a>, <a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.these">[1]</a>, <a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.these">[2]</a>
+  </dt>
+
+      </dl></dd>
+  </dl></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/Collection.html#Collection.Collection.unfreeze">unfreeze() (Collection.Collection method)</a>
+  </dt>
+
+      <dd><dl>
+        
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.DistributedBag.unfreeze">(DistributedBag.DistributedBag method)</a>
+  </dt>
+
+        
+  <dt><a href="modules/collections/DistributedDeque.html#DistributedDeque.DistributedDeque.unfreeze">(DistributedDeque.DistributedDeque method)</a>
+  </dt>
+
+      </dl></dd>
+  </dl></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.WORK_STEALING_MAX_MEMORY_MB">WORK_STEALING_MAX_MEMORY_MB (in module DistributedBag)</a>
+  </dt>
+
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.WORK_STEALING_MINIMUM">WORK_STEALING_MINIMUM (in module DistributedBag)</a>
+  </dt>
+
+  </dl></td>
+  <td style="width: 33%" valign="top"><dl>
+      
+  <dt><a href="modules/collections/DistributedBag.html#DistributedBag.WORK_STEALING_RATIO">WORK_STEALING_RATIO (in module DistributedBag)</a>
   </dt>
 
   </dl></td>

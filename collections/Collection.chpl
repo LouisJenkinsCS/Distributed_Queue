@@ -1,5 +1,9 @@
 /*
-  Base class for data structures.
+  A 'Collection' is a data structure, a container for elements that provide support
+  for insert, lookup, remove, and iteration operations.
+
+  BUG: Compiler does not currently allow overloading standalone or leader/follower
+  iterators, and as such only serial iterators may be used with a Collection.
 */
 class Collection {
   type eltType;
@@ -16,30 +20,34 @@ class Collection {
 
     BUG: Compiler will segfault if the returned value is not captured at callsite.
     'var capturedRetval = c.remove()'
+    BUG: Loop Invariant Code Motion causes undefined behavior if assigned to a
+    variable declared outside of loop. Use '--no-loop-invariant-code-motion' flag...
   */
   inline proc remove() : (bool, eltType) {
     halt("'proc remove() : (bool, eltType)' is not supported...");
   }
 
   /*
-    Check if the element exists in this data structure.
+    Lookup an element in the data structure, returning whether or not it was present.
   */
   inline proc contains(elt : eltType) : bool {
     halt("'proc contains(elt : eltType) : bool' is not supported...");
   }
 
   /*
-    Clears all elements from this data structure.
+    Clears all elements from this data structure. By default, this will repeatedly
+    invoke 'remove' until emptied.
   */
   inline proc clear() {
-    halt("'proc clear()' is not supported...");
+    while !remove()[1] do ;
   }
 
   /*
-    Check if this data structure is empty.
+    Check if this data structure is empty. By default, this will check if `size`
+    returns 0.
   */
   inline proc isEmpty() : bool {
-    halt("'proc isEmpty() : bool' is not supported...");
+    return size() == 0;
   }
 
   /*

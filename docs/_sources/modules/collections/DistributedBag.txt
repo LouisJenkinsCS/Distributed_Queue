@@ -1,0 +1,113 @@
+.. default-domain:: chpl
+
+.. module:: DistributedBag
+
+DistributedBag
+==============
+**Usage**
+
+.. code-block:: chapel
+
+   use DistributedBag;
+
+.. data:: config param INITIAL_BLOCK_SIZE = 1024
+
+   
+   The initial amount of elements in an unroll block. Each successive unroll block
+   is double the size of it's predecessor.
+
+.. data:: config param WORK_STEALING_RATIO = 0.25
+
+.. data:: config param WORK_STEALING_MAX_MEMORY_MB: real = 1.0
+
+.. data:: config param BAG_NO_FREEZE = false
+
+.. data:: config param WORK_STEALING_MINIMUM = 1
+
+.. class:: DistributedBag : Collection
+
+   .. attribute:: var targetLocDom: domain(1)
+
+   .. attribute:: var targetLocales: [targetLocDom] locale
+
+   .. method:: proc DistributedBag(type eltType, targetLocales: [?targetLocDom] locale = Locales)
+
+   .. method:: proc getPrivatizedInstance()
+
+      
+      Obtains a privatized version of this instance. The privatized version is a
+      cloned instance that is allocated on this node, which is useful for eliding
+      communications generated from accessing instance fields. Using another node's
+      instance will significantly penalize performance by bounding overall throughput
+      on the communication between the two nodes.
+      
+
+   .. method:: proc add(elt: eltType): bool
+
+      
+      Insert an element to this node's bag. The ordering is not guaranteed to be
+      preserved. If this instance is privatized, it is an entirely local operation.
+      
+
+   .. method:: proc remove(): (bool, eltType)
+
+      
+      Remove an element from this node's bag. The order in which elements are removed
+      are not guaranteed to be the same order it has been inserted. If this node's
+      bag is empty, it will attempt to steal elements from bags of other nodes.
+      
+
+   .. method:: proc size(): int
+
+      
+      Obtain the number of elements held in all bags across all nodes. This method
+      is best-effort if the bags are unfrozen, and can be non-deterministic for
+      concurrent updates across nodes, and may miss elements or even count
+      duplicates resulting from any concurrent insertion or removal operations.
+      
+
+   .. method:: proc contains(elt: eltType): bool
+
+      
+      Performs a lookup to determine if the requested element exists in this bag.
+      This method is best-effort if the bags are unfrozen, and can be
+      non-deterministic for concurrent updates across nodes, and may miss elements
+      resulting from any concurrent insertion or removal operations.
+      
+
+   .. method:: proc freeze()
+
+      
+      Freeze our state, becoming immutable; we wait for any ongoing concurrent
+      operations to allow them to finish.
+      
+
+   .. method:: proc unfreeze(): bool
+
+      
+      Unfreezes our state, allowing mutating operations; we wait on any ongoing
+      concurrent operations to allow them to finish.
+      
+
+   .. method:: proc canFreeze(): bool
+
+   .. method:: proc isFrozen(): bool
+
+      
+      If we are currently frozen. If we are in the middle of a state transition, we
+      wait until it has completed.
+      
+
+   .. itermethod:: iter these(): eltType
+
+      
+      Iterate over each bag in each node. If the bag is frozen, we elide the need
+      to acquire any locks and iterate directly over the bag. If the bag is not
+      frozen, we must acquire not only the needed locks, but also take a snapshot
+      approach, increasing memory consumption.
+      
+
+   .. itermethod:: iter these(param tag: iterKind)
+
+   .. itermethod:: iter these(param tag: iterKind, followThis)
+

@@ -10,10 +10,23 @@ SynchronizedList
 
    use SynchronizedList;
 
-.. class:: SynchronizedList : IndexableList
+.. class:: SynchronizedListNode
 
-   
-   A synchronized list using the CC-Synch algorithm for scalability. More information
-   is available on the technique `here <https://opencourses.uoc.gr/courses/pluginfile.php/17173/mod_resource/content/0/HY586-Section3.pdf>`_
+   .. attribute:: type eltType
 
+   .. attribute:: var elt: eltType
+
+   .. attribute:: var next: SynchronizedListNode(eltType)
+
+.. class:: SynchronizedList : Collection
+
+   .. attribute:: var head: SynchronizedListNode(eltType)
+
+   .. attribute:: var tail: SynchronizedListNode(eltType)
+
+   .. attribute:: var lock$: sync(bool)
+
+   .. method:: proc add(elt: eltType): bool
+
+   .. method:: proc remove(): (bool, eltType)
 

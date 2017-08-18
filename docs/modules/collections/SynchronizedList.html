@@ -31,8 +31,7 @@
 
   
     <link rel="top" title="chpldoc 0.0.1 documentation" href="../../index.html"/>
-        <link rel="next" title="SynchronizedQueue" href="SynchronizedQueue.html"/>
-        <link rel="prev" title="DistributedQueue" href="DistributedQueue.html"/> 
+        <link rel="prev" title="DistributedDeque" href="DistributedDeque.html"/> 
 
   
   <script src="../../_static/js/modernizr.min.js"></script>
@@ -86,14 +85,9 @@
 </ul>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="Collection.html">Collection</a></li>
-<li class="toctree-l1"><a class="reference internal" href="Collection/List.html">List</a></li>
-<li class="toctree-l1"><a class="reference internal" href="Collection/Queue.html">Queue</a></li>
-<li class="toctree-l1"><a class="reference internal" href="Collection/Stack.html">Stack</a></li>
-<li class="toctree-l1"><a class="reference internal" href="DistributedBoundedQueue.html">DistributedBoundedQueue</a></li>
-<li class="toctree-l1"><a class="reference internal" href="DistributedList.html">DistributedList</a></li>
-<li class="toctree-l1"><a class="reference internal" href="DistributedQueue.html">DistributedQueue</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DistributedBag.html">DistributedBag</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DistributedDeque.html">DistributedDeque</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="">SynchronizedList</a></li>
-<li class="toctree-l1"><a class="reference internal" href="SynchronizedQueue.html">SynchronizedQueue</a></li>
 </ul>
 
             
@@ -145,10 +139,53 @@
 </pre></div>
 </div>
 <dl class="class">
+<dt id="SynchronizedList.SynchronizedListNode">
+<em class="property">class </em><code class="descname">SynchronizedListNode</code><a class="headerlink" href="#SynchronizedList.SynchronizedListNode" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="attribute">
+<dt id="SynchronizedList.SynchronizedListNode.eltType">
+<em class="property">type </em><code class="descname">eltType</code><a class="headerlink" href="#SynchronizedList.SynchronizedListNode.eltType" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="SynchronizedList.SynchronizedListNode.elt">
+<em class="property">var </em><code class="descname">elt</code>: eltType<a class="headerlink" href="#SynchronizedList.SynchronizedListNode.elt" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="SynchronizedList.SynchronizedListNode.next">
+<em class="property">var </em><code class="descname">next</code>: SynchronizedListNode(eltType)<a class="headerlink" href="#SynchronizedList.SynchronizedListNode.next" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="SynchronizedList.SynchronizedList">
-<em class="property">class </em><code class="descname">SynchronizedList</code>: IndexableList<a class="headerlink" href="#SynchronizedList.SynchronizedList" title="Permalink to this definition">¶</a></dt>
-<dd><p>A synchronized list using the CC-Synch algorithm for scalability. More information
-is available on the technique <a class="reference external" href="https://opencourses.uoc.gr/courses/pluginfile.php/17173/mod_resource/content/0/HY586-Section3.pdf">here</a></p>
+<em class="property">class </em><code class="descname">SynchronizedList</code>: Collection<a class="headerlink" href="#SynchronizedList.SynchronizedList" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="attribute">
+<dt id="SynchronizedList.SynchronizedList.head">
+<em class="property">var </em><code class="descname">head</code>: SynchronizedListNode(eltType)<a class="headerlink" href="#SynchronizedList.SynchronizedList.head" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="SynchronizedList.SynchronizedList.tail">
+<em class="property">var </em><code class="descname">tail</code>: SynchronizedListNode(eltType)<a class="headerlink" href="#SynchronizedList.SynchronizedList.tail" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="SynchronizedList.SynchronizedList.lock$">
+<em class="property">var </em><code class="descname">lock$</code>: sync(bool)<a class="headerlink" href="#SynchronizedList.SynchronizedList.lock$" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="SynchronizedList.SynchronizedList.add">
+<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#SynchronizedList.SynchronizedList.add" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="SynchronizedList.SynchronizedList.remove">
+<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#SynchronizedList.SynchronizedList.remove" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 </div>
@@ -160,10 +197,8 @@ is available on the technique <a class="reference external" href="https://openco
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="SynchronizedQueue.html" class="btn btn-neutral float-right" title="SynchronizedQueue" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
       
-      
-        <a href="DistributedQueue.html" class="btn btn-neutral" title="DistributedQueue" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="DistributedDeque.html" class="btn btn-neutral" title="DistributedDeque" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   

@@ -10,43 +10,22 @@ Collection
 
    use Collection;
 
-**Submodules**
-
-.. toctree::
-   :maxdepth: 1
-   :glob:
-
-   Collection/*
-
-.. function:: proc +=(c: Collection(?eltTyp), other): bool
-
-   
-   Syntactic sugar for 'add'.
-
 .. class:: Collection
 
    
-   Base class for data structures.
+   A 'Collection' is a data structure, a container for elements that provide support
+   for insert, lookup, remove, and iteration operations.
+   
+   BUG: Compiler does not currently allow overloading standalone or leader/follower
+   iterators, and as such only serial iterators may be used with a Collection.
 
 
    .. attribute:: type eltType
 
-   .. method:: proc add(elt: eltType ...?nElts): bool
+   .. method:: proc add(elt: eltType): bool
 
       
       Adds an element to this data structure.
-      
-
-   .. method:: proc add(otherCollection: Collection(eltType)): bool
-
-      
-      Add all elements from another collection to this.
-      
-
-   .. method:: proc add(elts: [?nElts] eltType): bool
-
-      
-      Add all elements in the array.
       
 
    .. method:: proc remove(): (bool, eltType)
@@ -54,38 +33,33 @@ Collection
       
       Removes an arbitrary element from this data structure.
       
-
-   .. method:: proc remove(nElems: int): Collection(eltType)
-
-      
-      Removes up to `nElems` elements into a separate collection.
-      
-
-   .. method:: proc removeItem(elt: eltType): bool
-
-      
-      Removes an item from the data structure (if it exists).
+      BUG: Compiler will segfault if the returned value is not captured at callsite.
+      'var capturedRetval = c.remove()'
+      BUG: Loop Invariant Code Motion causes undefined behavior if assigned to a
+      variable declared outside of loop. Use '--no-loop-invariant-code-motion' flag...
       
 
    .. method:: proc contains(elt: eltType): bool
 
       
-      Check if the element exists in this data structure.
+      Lookup an element in the data structure, returning whether or not it was present.
       
 
    .. method:: proc clear()
 
       
-      Clears all elements from this data structure.
+      Clears all elements from this data structure. By default, this will repeatedly
+      invoke 'remove' until emptied.
       
 
-   .. method:: proc isEmpty: bool
+   .. method:: proc isEmpty(): bool
 
       
-      Check if this data structure is empty.
+      Check if this data structure is empty. By default, this will check if `size`
+      returns 0.
       
 
-   .. method:: proc size: int
+   .. method:: proc size(): int
 
       
       Obtain the number of elements contained in this data structure.
@@ -96,4 +70,17 @@ Collection
       
       Iterate over all elements in the data structure.
       
+
+   .. method:: proc freeze(): bool
+
+   .. method:: proc unfreeze(): bool
+
+   .. method:: proc canFreeze(): bool
+
+   .. method:: proc isFrozen(): bool
+
+.. function:: proc +=(ref c: Collection(?eltType), elt: eltType)
+
+   
+   Syntactic sugar for 'add'.
 

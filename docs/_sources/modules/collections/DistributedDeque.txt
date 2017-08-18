@@ -1,0 +1,157 @@
+.. default-domain:: chpl
+
+.. module:: DistributedDeque
+
+DistributedDeque
+================
+**Usage**
+
+.. code-block:: chapel
+
+   use DistributedDeque;
+
+.. data:: config param DEQUE_BLOCK_SIZE = 8
+
+   
+   Size of each unroll block for each local deque node.
+
+.. data:: config param DEQUE_NO_FREEZE = false
+
+   
+   Turn off checks for freezing the data structure.
+
+.. class:: DistributedDeque : Collection
+
+   
+   An unbounded queue that is distributed across nodes.
+
+
+   .. attribute:: var cap
+
+   .. attribute:: var targetLocales
+
+   .. method:: proc DistributedDeque(type eltType, cap = -1, targetLocales = Locales)
+
+   .. method:: proc add(elt: eltType): bool
+
+      
+      Syntactic sugar for `pushBack`.
+      
+
+   .. method:: proc remove(): (bool, eltType)
+
+      
+      Syntactic sugar for `popFront`.
+      
+
+   .. method:: proc enqueue(elt: eltType): bool
+
+      
+      Syntactic sugar for `pushBack`.
+      
+
+   .. method:: proc dequeue(): (bool, eltType)
+
+      
+      Syntactic sugar for `popFront`.
+      
+
+   .. method:: proc push(elt: eltType): bool
+
+      
+      Syntactic sugar for `pushBack`.
+      
+
+   .. method:: proc pop(): (bool, eltType)
+
+      
+      Syntactic sugar for `popBack`.
+      
+
+   .. method:: proc pushBack(elt: eltType): bool
+
+      
+      Appends the element to the tail.
+      
+
+   .. method:: proc popBack(): (bool, eltType)
+
+      
+      Removes the element at the tail.
+      
+
+   .. method:: proc pushFront(elt: eltType): bool
+
+      
+      Appends the element to the head.
+      
+
+   .. method:: proc popFront(): (bool, eltType)
+
+      
+      Removes the element at the head.
+      
+
+   .. method:: proc canFreeze(): bool
+
+   .. method:: proc isFrozen(): bool
+
+      
+      If we are currently frozen. If we are in the middle of a state transition, we
+      wait until it has completed.
+      
+
+   .. method:: proc freeze(): bool
+
+      
+      Freeze our state, becoming immutable; we wait for any ongoing concurrent
+      operations to allow them to finish.
+      
+
+   .. method:: proc unfreeze(): bool
+
+      
+      Unfreezes our state, allowing mutating operations; we wait on any ongoing
+      concurrent operations to allow them to finish.
+      
+
+   .. method:: proc size(): int
+
+      
+      Obtains the number of elements held by this queue.
+      
+
+   .. method:: proc contains(elt: eltType): bool
+
+      
+      Performs a lookup for the element in the data structure in parallel if it is
+      frozen, and sequentially otherwise.
+      
+
+   .. itermethod:: iter these(): eltType
+
+      
+      Iterate over the queue in any arbitrary order. If an ordering is desired,
+      see both `LIFO` and `FIFO` iterators.
+      
+
+   .. itermethod:: iter FIFO(): eltType
+
+      
+      Iterates over the deque in First-In-First-Out order, from front to back. The
+      deque must be frozen or it will result in a halt. This operation is sequential.
+      
+
+   .. itermethod:: iter LIFO(): eltType
+
+      
+      Iterates over the deque in Last-In-First-Out order, from back to front. The
+      deque must be frozen or it will result in a halt. This operation is sequential.
+      
+
+   .. itermethod:: iter these(param tag: iterKind)
+
+   .. itermethod:: iter these(param tag: iterKind, followThis)
+
+   .. method:: proc deinit()
+

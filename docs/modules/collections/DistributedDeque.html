@@ -1,0 +1,383 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>DistributedDeque &mdash; chpldoc 0.0.1 documentation</title>
+  
+
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+    <link rel="top" title="chpldoc 0.0.1 documentation" href="../../index.html"/>
+        <link rel="next" title="SynchronizedList" href="SynchronizedList.html"/>
+        <link rel="prev" title="DistributedBag" href="DistributedBag.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> chpldoc
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+                <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../index.html">chpldoc documentation</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Collection.html">Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DistributedBag.html">DistributedBag</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="">DistributedDeque</a></li>
+<li class="toctree-l1"><a class="reference internal" href="SynchronizedList.html">SynchronizedList</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../../index.html">chpldoc</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+      
+    <li>DistributedDeque</li>
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../_sources/modules/collections/DistributedDeque.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <span class="target" id="module-DistributedDeque"></span><div class="section" id="distributeddeque">
+<h1>DistributedDeque<a class="headerlink" href="#distributeddeque" title="Permalink to this headline">¶</a></h1>
+<p><strong>Usage</strong></p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">use</span> <span class="nx">DistributedDeque</span><span class="p">;</span>
+</pre></div>
+</div>
+<dl class="data">
+<dt id="DistributedDeque.DEQUE_BLOCK_SIZE">
+<em class="property">config param </em><code class="descname">DEQUE_BLOCK_SIZE</code> = 8<a class="headerlink" href="#DistributedDeque.DEQUE_BLOCK_SIZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Size of each unroll block for each local deque node.</p>
+</dd></dl>
+
+<dl class="data">
+<dt id="DistributedDeque.DEQUE_NO_FREEZE">
+<em class="property">config param </em><code class="descname">DEQUE_NO_FREEZE</code> = false<a class="headerlink" href="#DistributedDeque.DEQUE_NO_FREEZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turn off checks for freezing the data structure.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="DistributedDeque.DistributedDeque">
+<em class="property">class </em><code class="descname">DistributedDeque</code>: Collection<a class="headerlink" href="#DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
+<dd><p>An unbounded queue that is distributed across nodes.</p>
+<dl class="attribute">
+<dt id="DistributedDeque.DistributedDeque.cap">
+<em class="property">var </em><code class="descname">cap</code><a class="headerlink" href="#DistributedDeque.DistributedDeque.cap" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="DistributedDeque.DistributedDeque.targetLocales">
+<em class="property">var </em><code class="descname">targetLocales</code><a class="headerlink" href="#DistributedDeque.DistributedDeque.targetLocales" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.DistributedDeque">
+<em class="property">proc </em><code class="descname">DistributedDeque</code><span class="sig-paren">(</span><em>type eltType</em>, <em>cap = -1</em>, <em>targetLocales = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.add">
+<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.add" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.remove">
+<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.remove" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>popFront</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.enqueue">
+<em class="property">proc </em><code class="descname">enqueue</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.enqueue" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.dequeue">
+<em class="property">proc </em><code class="descname">dequeue</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.dequeue" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>popFront</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.push">
+<em class="property">proc </em><code class="descname">push</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.push" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.pop">
+<em class="property">proc </em><code class="descname">pop</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.pop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>popBack</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.pushBack">
+<em class="property">proc </em><code class="descname">pushBack</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.pushBack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Appends the element to the tail.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.popBack">
+<em class="property">proc </em><code class="descname">popBack</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.popBack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes the element at the tail.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.pushFront">
+<em class="property">proc </em><code class="descname">pushFront</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.pushFront" title="Permalink to this definition">¶</a></dt>
+<dd><p>Appends the element to the head.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.popFront">
+<em class="property">proc </em><code class="descname">popFront</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.popFront" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes the element at the head.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.canFreeze">
+<em class="property">proc </em><code class="descname">canFreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.canFreeze" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.isFrozen">
+<em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.isFrozen" title="Permalink to this definition">¶</a></dt>
+<dd><p>If we are currently frozen. If we are in the middle of a state transition, we
+wait until it has completed.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.freeze">
+<em class="property">proc </em><code class="descname">freeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.freeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Freeze our state, becoming immutable; we wait for any ongoing concurrent
+operations to allow them to finish.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.unfreeze">
+<em class="property">proc </em><code class="descname">unfreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.unfreeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unfreezes our state, allowing mutating operations; we wait on any ongoing
+concurrent operations to allow them to finish.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.size">
+<em class="property">proc </em><code class="descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Obtains the number of elements held by this queue.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.contains">
+<em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.contains" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a lookup for the element in the data structure in parallel if it is
+frozen, and sequentially otherwise.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt id="DistributedDeque.DistributedDeque.these">
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.these" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate over the queue in any arbitrary order. If an ordering is desired,
+see both <cite>LIFO</cite> and <cite>FIFO</cite> iterators.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt id="DistributedDeque.DistributedDeque.FIFO">
+<em class="property">iter </em><code class="descname">FIFO</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.FIFO" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterates over the deque in First-In-First-Out order, from front to back. The
+deque must be frozen or it will result in a halt. This operation is sequential.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt id="DistributedDeque.DistributedDeque.LIFO">
+<em class="property">iter </em><code class="descname">LIFO</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.LIFO" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterates over the deque in Last-In-First-Out order, from back to front. The
+deque must be frozen or it will result in a halt. This operation is sequential.</p>
+</dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistributedDeque.deinit">
+<em class="property">proc </em><code class="descname">deinit</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.deinit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="SynchronizedList.html" class="btn btn-neutral float-right" title="SynchronizedList" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="DistributedBag.html" class="btn btn-neutral" title="DistributedBag" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2015, .
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'0.0.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+  
+ 
+
+
+
+</body>
+</html>

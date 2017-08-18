@@ -9,7 +9,12 @@ use Collection;
   of checking whether you may proceed with an operation, that is wait-free under
   most cases, lock-free in the worst case, which guarantees scalability. In the
   barrier, we perform freeze checks (if DEQUE_NO_FREEZE is not enabled), and bounds
-  checking (if a capacity is given). 
+  checking (if a capacity is given). Deque operations are separated into two
+  levels: global and local. At a global level, we use simple fetchAdd and fetchSub
+  counters to denote which local deque we apply our operation to, and at a local level
+  we use an unrolled linked list which further has its own (non-atomic) counter.
+  By maintaining an
+
 */
 
 /*
@@ -24,11 +29,15 @@ private const FREEZE_FROZEN = 2;
   Size of each unroll block for each local deque node.
 */
 config param DEQUE_BLOCK_SIZE = 8;
+/*
+    Turn off checks for freezing the data structure.
+*/
 config param DEQUE_NO_FREEZE = false;
 
 // For each node we manage an unroll block. This block needs to also support Deque
 // operations, and as such we maintain our own mini headIdx and tailIdx. Since we can
 // add and remove from either direction, we must also maintain the size ourselves...
+pragma "no doc"
 class LocalDequeNode {
   type eltType;
   var elements : DEQUE_BLOCK_SIZE * eltType;
@@ -91,6 +100,7 @@ class LocalDequeNode {
 /*
   For each slot we maintain a deque.
 */
+pragma "no doc"
 class LocalDeque {
   type eltType;
 
@@ -307,27 +317,27 @@ class DistributedDeque : Collection {
   var targetLocales;
 
   // Privatization id
-  var pid : int;
+  private var pid : int;
 
   // Keeps track of which slot we are on...
-  var globalHead : atomic int;
-  var globalTail : atomic int;
-  var queueSize : atomic int;
+  private var globalHead : atomic int;
+  private var globalTail : atomic int;
+  private var queueSize : atomic int;
 
   // Freezing the queue consists of two phases: The 'marked' phase, where the queue
   // is marked for a state change, which prevents any new tasks for a particular state
   // from entering, followed by a 'waiting' phase where we wait any concurrent tasks
   // to find across all nodes (in case they did not notice the state change). This
   // applies to state changes to frozen and unfrozen state.
-  var concurrentTasks : atomic int;
-  var frozenState : atomic int;
+  private var concurrentTasks : atomic int;
+  private var frozenState : atomic int;
 
   // We maintain an array of slots, wherein each slot is a pointer into a node's
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
   // to reduce the amount of contention.
-  var nSlots = here.maxTaskPar * targetLocales.size;
-  var slotSpace = {0..#nSlots};
-  var slots : [slotSpace] LocalDeque(eltType);
+  private var nSlots = here.maxTaskPar * targetLocales.size;
+  private var slotSpace = {0..#nSlots};
+  private var slots : [slotSpace] LocalDeque(eltType);
 
   proc DistributedDeque(type eltType, cap=-1, targetLocales=Locales) {
     nSlots = here.maxTaskPar * targetLocales.size;
@@ -345,22 +355,27 @@ class DistributedDeque : Collection {
     pid = _newPrivatizedClass(this);
   }
 
+  pragma "no doc"
   proc DistributedDeque(other, privData, type eltType = other.eltType, cap=other.cap, targetLocales=other.targetLocales) {
     slots = other.slots;
   }
 
+  pragma "no doc"
   proc dsiPrivatize(privData) {
       return new DistributedDeque(this, privData);
   }
 
+  pragma "no doc"
   proc dsiGetPrivatizeData() {
     return pid;
   }
 
+  pragma "no doc"
   inline proc getPrivatizedThis {
     return chpl_getPrivatizedCopy(this.type, pid);
   }
 
+  pragma "no doc"
   inline proc enterRemoveBarrier(localThis) {
     // Enter freeze barrier...
     if !DEQUE_NO_FREEZE {
@@ -418,6 +433,7 @@ class DistributedDeque : Collection {
     return true;
   }
 
+  pragma "no doc"
   inline proc enterAddBarrier(localThis) {
     // Enter freeze barrier...
     if !DEQUE_NO_FREEZE {
@@ -688,14 +704,6 @@ class DistributedDeque : Collection {
   }
 
   /*
-    Clears all elements from all bags across nodes. It is equivalent to a sequence
-    of `remove` operations.
-  */
-  proc clear() {
-    while remove()[1] do ;
-  }
-
-  /*
     Obtains the number of elements held by this queue.
   */
   proc size() : int {
@@ -703,13 +711,9 @@ class DistributedDeque : Collection {
   }
 
   /*
-    Determine if this queue is empty.
+    Performs a lookup for the element in the data structure in parallel if it is
+    frozen, and sequentially otherwise.
   */
-  proc isEmpty() : bool {
-      return size() == 0;
-  }
-
-  // TODO: Make Convoy Avoidant
   proc contains(elt : eltType) : bool {
     // Frozen lookups can be done concurrently
     if isFrozen() {
@@ -766,7 +770,7 @@ class DistributedDeque : Collection {
 
   /*
     Iterate over the queue in any arbitrary order. If an ordering is desired,
-    see both LIFO and FIFO iterators.
+    see both `LIFO` and `FIFO` iterators.
   */
   iter these() : eltType {
     var frozen = isFrozen();
@@ -791,7 +795,11 @@ class DistributedDeque : Collection {
     }
   }
 
-  iter FIFO() {
+  /*
+    Iterates over the deque in First-In-First-Out order, from front to back. The
+    deque must be frozen or it will result in a halt. This operation is sequential.
+  */
+  iter FIFO() : eltType {
     if !isFrozen() {
       halt("Ordered iteration requires the queue to be frozen.");
     }
@@ -850,7 +858,11 @@ class DistributedDeque : Collection {
     }
   }
 
-  iter LIFO() {
+  /*
+    Iterates over the deque in Last-In-First-Out order, from back to front. The
+    deque must be frozen or it will result in a halt. This operation is sequential.
+  */
+  iter LIFO() : eltType {
     if !isFrozen() {
       halt("Ordered iteration requires the queue to be frozen.");
     }

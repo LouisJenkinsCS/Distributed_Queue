@@ -74,7 +74,10 @@ private const REMOVE_BEST_CASE = 2;
 private const REMOVE_AVERAGE_CASE = 3;
 private const REMOVE_WORST_CASE = 4;
 
-// The initial amount of elements in an unroll block.
+/*
+  The initial amount of elements in an unroll block. Each successive unroll block
+  is double the size of it's predecessor.
+*/
 config param INITIAL_BLOCK_SIZE = 1024;
 // The amount we attempt to steal from each segment of other nodes. Helps to
 // further ensure a proper load balance by not leaving segments empty by stealing
@@ -95,6 +98,7 @@ config param WORK_STEALING_MINIMUM = 1;
   size of each subsequent unroll block by twice the size. This is so that stealing
   work is faster in that majority of elements are confined to one area.
 */
+pragma "no doc"
 class BagSegmentBlock {
   type eltType;
 
@@ -167,6 +171,7 @@ class BagSegmentBlock {
   A segment is, in and of itself an unrolled linked list. We maintain one per core
   to ensure maximum parallelism.
 */
+pragma "no doc"
 record BagSegment {
   type eltType;
 
@@ -378,6 +383,7 @@ record BagSegment {
   We maintain a multiset 'bag' per node. Each bag keeps a handle to it's parent,
   which is required for work stealing.
 */
+pragma "no doc"
 class Bag {
   type eltType;
 
@@ -697,12 +703,12 @@ class Bag {
 class DistributedBag : Collection {
   var targetLocDom : domain(1);
   var targetLocales : [targetLocDom] locale;
-  var pid : int = -1;
+  private var pid : int = -1;
 
   // Node-local fields
-  var bag : Bag(eltType);
-  var concurrentTasks : atomic int;
-  var frozenState : atomic int;
+  private var bag : Bag(eltType);
+  private var concurrentTasks : atomic int;
+  private var frozenState : atomic int;
 
   proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
     bag = new Bag(eltType, this);
@@ -711,6 +717,7 @@ class DistributedBag : Collection {
     pid = _newPrivatizedClass(this);
   }
 
+  pragma "no doc"
   proc DistributedBag(other, pid, type eltType = other.eltType) {
     bag = new Bag(eltType, this);
     this.targetLocDom = other.targetLocDom;
@@ -718,14 +725,17 @@ class DistributedBag : Collection {
     this.pid = pid;
   }
 
+  pragma "no doc"
   proc dsiPrivatize(pid) {
     return new DistributedBag(this, pid);
   }
 
+  pragma "no doc"
   proc dsiGetPrivatizeData() {
     return pid;
   }
 
+  pragma "no doc"
   inline proc getPrivatizedThis {
     if this.locale == here {
       return this;
@@ -824,22 +834,6 @@ class DistributedBag : Collection {
       }
     }
     return foundElt.read();
-  }
-
-  /*
-    Clears all elements from all bags across nodes. It is equivalent to a sequence
-    of `remove` operations.
-  */
-  proc clear() {
-    while remove()[1] do ;
-  }
-
-  /*
-    If all bags are currently empty. See `size` for notes on non-deterministic
-    behavior.
-  */
-  proc isEmpty() : bool {
-    return size() == 0;
   }
 
   /*
