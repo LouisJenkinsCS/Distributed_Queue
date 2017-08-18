@@ -4,19 +4,41 @@ use BlockDist;
 /*
   A highly parallel segmented multiset. Each node gets its own bag, and in each bag
   it is segmented into 'here.maxTaskPar' segments. Segments allow for actual parallelism
-  while operating on the queue in that it enables us to manage 'best-case', 'average-case',
-  and 'worst-case' scenarios by making multiple passes over each segment. Examples
-  of 'best-case' scenarios would be when a segment is unlocked. 'average-case' would be
-  when any unlocked/locked segment, and so on. This ensures that if any segment is
-  not contested, it is the first to be chosen over one that already is.
+  while operating in that it enables us to manage 'best-case', 'average-case',
+  and 'worst-case' scenarios by making multiple passes over each segment. In the
+  case where there is no oversubscription, the best-case will always be achieved
+  (considering any other conditions are also met), while in the case of oversubscription
+  or, for example a near empty bag, we fall into the 'average-case', etc. Examples
+  of 'best-case' scenarios for a removal would be when a segment is unlocked
+  and contains some elements we can drain, and the 'average-case' would be to find
+  any segment, unlocked or not, that contains elements we can drain, and so on.
 
-  This data structure employs its own load balancing, employing both a best-effort
-  round-robin algorithm for load distribution of local segments, and employing a
-  work-stealing algorithm for evening load distribution across nodes. The round-robin
-  reduces contention inherent from beginning at a single segment and aid in local
-  load distribution. The work-stealing algorithm steals horizontally across nodes,
-  in that segments steal from other segments that share the same index on another node,
-  ensuring both global and local load distribution.
+  This data structure also employs its own load balancing algorithm, beginning
+  with a best-effort round-robin algorithm such that each task begins searching
+  at another segment (with the added benefit of reducing overall contention), in
+  particular is useful for locally distributing insertion operations. Next it also
+  employs a work-stealing algorithm that horizontally steals a ratio of elements
+  across segments. A segment is considered 'horizontal' if it shares the same
+  segment index within [0, here.maxTaskPar); those other segments likely are also
+  benefitted from local distribution from the round-robin algorithm discussed above.
+  We also steal a ratio of elements, say 25%, because it leaves all other segments
+  with 75% of their work; the more elements they have, the more we take, but the
+  less they have, the less we steal; this also has the added benefit of reducing
+  unnecessary work stealing between segments when the bag is nearly emptied. Furthermore,
+  stealing horizontally ensures that all segments remain filled and that we still
+  achieve parallelism across segments for removal operations. Lastly, we attempt
+  to steal a maximum of `N / sizeof(eltType)`, where N is some size in megabytes
+  (representing how much data can be sent in one network request), which keeps
+  down excessive communication.
+
+  This data structure does not come without flaws; as work stealing is dynamic
+  and trigered on demand, work stealing can still be performed in excess, which
+  dramatically causes a performance drop; this data structure scales in terms of
+  both processors per node, and in terms of raw nodes themselves. As well, due
+  to how work stealing is, we perform the best when we have large amounts of data
+  to work on, but do not do well with smaller amounts due to excessive work stealing.
+  As well, to achieve true parallelism, one must use a privatized instance, specific
+  to their node to avoid communication overhead of accessing class fields.
 */
 
 /*
@@ -725,6 +747,16 @@ class DistributedBag : Collection {
     preserved. If this instance is privatized, it is an entirely local operation.
   */
   proc add(elt : eltType) : bool {
+    var localThis = getPrivatizedThis;
+    local {
+      localThis.concurrentTasks.add(1);
+
+      // Check if the queue is now 'immutable'.
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
+        localThis.concurrentTasks.sub(1);
+        return false;
+      }
+    }
     return getPrivatizedThis.bag.add(elt);
   }
 
@@ -734,6 +766,16 @@ class DistributedBag : Collection {
     bag is empty, it will attempt to steal elements from bags of other nodes.
   */
   proc remove() : (bool, eltType) {
+    var localThis = getPrivatizedThis;
+    local {
+      localThis.concurrentTasks.add(1);
+
+      // Check if the queue is now 'immutable'.
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
+        localThis.concurrentTasks.sub(1);
+        return (false, _defaultOf(eltType));
+      }
+    }
     return getPrivatizedThis.bag.remove();
   }
 
