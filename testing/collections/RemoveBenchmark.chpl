@@ -54,8 +54,9 @@ proc main() {
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
         var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
-        for i in 1 .. bd.iterations {
-          c.remove();
+        while true {
+          var (hasElem, elem) = c.remove();
+          if !hasElem then break;
         }
       },
       deinitFn = deinitFn,
@@ -74,8 +75,9 @@ proc main() {
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
         var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
-        for i in 1 .. bd.iterations {
-          c.remove();
+        while true {
+          var (hasElem, elem) = c.remove();
+          if !hasElem then break;
         }
       },
       deinitFn = deinitFn,

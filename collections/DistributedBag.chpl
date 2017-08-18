@@ -86,6 +86,8 @@ config param INITIAL_BLOCK_SIZE = 1024;
 config param WORK_STEALING_RATIO = 0.25;
 config param WORK_STEALING_MAX_MEMORY_MB : real = 1.0;
 config param BAG_NO_FREEZE = false;
+// The amount of elements a segment must have to be stolen from.
+config param WORK_STEALING_MINIMUM = 1;
 
 /*
   A segment block is an unrolled linked list node that holds a contiguous buffer
@@ -608,11 +610,11 @@ class Bag {
 
                           // As we only care that the segment contains data,
                           // we test-and-test-and-set until we gain ownership.
-                          while !targetSegment.isEmpty {
+                          while targetSegment.nElems.read() >= WORK_STEALING_MINIMUM {
                             var backoff = 0;
                             if targetSegment.currentStatus == STATUS_UNLOCKED && targetSegment.acquireWithStatus(STATUS_REMOVE) {
-                              // Sanity check: ensure segment wasn't emptied since last check
-                              if targetSegment.isEmpty {
+                              // Sanity check: ensure segment did not fall under minimum since last check
+                              if  targetSegment.nElems.read() < WORK_STEALING_MINIMUM {
                                 targetSegment.releaseStatus();
                                 break;
                               }
@@ -620,7 +622,7 @@ class Bag {
                               extern proc sizeof(type x): size_t;
                               // We steal at most 1MB worth of data. If the user has less than that, we steal a %, at least 1.
                               const mb = WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024;
-                              var toSteal = max(1, min(mb / sizeof(eltType), targetSegment.nElems.read() * WORK_STEALING_RATIO)) : int;
+                              var toSteal = max(WORK_STEALING_MINIMUM, min(mb / sizeof(eltType), targetSegment.nElems.read() * WORK_STEALING_RATIO)) : int;
 
                               // Allocate storage...
                               on stolenWork do stolenWork[loc.id] = (toSteal, c_malloc(eltType, toSteal));
@@ -833,7 +835,7 @@ class DistributedBag : Collection {
   }
 
   /*
-    If all bags are current empty. See `size` for notes on non-deterministic
+    If all bags are currently empty. See `size` for notes on non-deterministic
     behavior.
   */
   proc isEmpty() : bool {

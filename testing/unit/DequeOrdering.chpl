@@ -13,8 +13,18 @@ var deque = (if isBounded then new DistributedDeque(int, cap = nElems) else new 
 for i in 1 .. nElems {
   deque.enqueue(i);
 }
+
 assert(deque.size() == nElems);
 assert(deque.contains(nElems / 2));
+
+deque.freeze();
+var expect = 1;
+for elem in deque.FIFO() {
+  assert(elem == expect);
+  expect += 1;
+}
+deque.unfreeze();
+
 for i in 1 .. nElems {
   var (hasElem, elem) = deque.dequeue();
   assert(hasElem && elem == i);
