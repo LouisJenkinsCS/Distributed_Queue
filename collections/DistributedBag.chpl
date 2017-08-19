@@ -32,7 +32,7 @@ use BlockDist;
   down excessive communication.
 
   This data structure does not come without flaws; as work stealing is dynamic
-  and trigered on demand, work stealing can still be performed in excess, which
+  and triggered on demand, work stealing can still be performed in excess, which
   dramatically causes a performance drop; this data structure scales in terms of
   both processors per node, and in terms of raw nodes themselves. As well, due
   to how work stealing is, we perform the best when we have large amounts of data
@@ -112,6 +112,426 @@ config param BAG_NO_FREEZE = false;
   others and should not be stolen from.
 */
 config param WORK_STEALING_MINIMUM = 1;
+
+/*
+  A parallel-safe distributed multiset implementation that scales in terms of
+  both nodes and processors per node. This data structure is unordered and employs
+  its own work-stealing algorithm, and provides a means to obtain a privatized instance of
+  the data structure for maximized performance. This is an ideal backbone for a
+  means to distribute work across nodes.
+*/
+class DistributedBag : Collection {
+  var targetLocDom : domain(1);
+  var targetLocales : [targetLocDom] locale;
+  private var pid : int = -1;
+
+  // Node-local fields
+  private var bag : Bag(eltType);
+  private var concurrentTasks : atomic int;
+  private var frozenState : atomic int;
+
+  proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
+    bag = new Bag(eltType, this);
+    this.targetLocDom = targetLocDom;
+    this.targetLocales = targetLocales;
+    pid = _newPrivatizedClass(this);
+  }
+
+  pragma "no doc"
+  proc DistributedBag(other, pid, type eltType = other.eltType) {
+    bag = new Bag(eltType, this);
+    this.targetLocDom = other.targetLocDom;
+    this.targetLocales = other.targetLocales;
+    this.pid = pid;
+  }
+
+  pragma "no doc"
+  proc dsiPrivatize(pid) {
+    return new DistributedBag(this, pid);
+  }
+
+  pragma "no doc"
+  proc dsiGetPrivatizeData() {
+    return pid;
+  }
+
+  pragma "no doc"
+  inline proc getPrivatizedThis {
+    if this.locale == here {
+      return this;
+    }
+
+    return chpl_getPrivatizedCopy(this.type, pid);
+  }
+
+  /*
+    Obtains a privatized version of this instance. The privatized version is a
+    cloned instance that is allocated on this node, which is useful for eliding
+    communications generated from accessing instance fields. Using another node's
+    instance will significantly penalize performance by bounding overall throughput
+    on the communication between the two nodes.
+  */
+  proc getPrivatizedInstance() {
+    return getPrivatizedThis;
+  }
+
+  /*
+    Insert an element to this node's bag. The ordering is not guaranteed to be
+    preserved. If this instance is privatized, it is an entirely local operation.
+  */
+  proc add(elt : eltType) : bool {
+    var localThis = getPrivatizedThis;
+    if BAG_NO_FREEZE then return localThis.bag.add(elt);
+
+    local {
+      localThis.concurrentTasks.add(1);
+
+      // Check if the queue is now 'immutable'.
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
+        localThis.concurrentTasks.sub(1);
+        return false;
+      }
+    }
+
+    var result = localThis.bag.add(elt);
+    local { localThis.concurrentTasks.sub(1); }
+    return result;
+  }
+
+  /*
+    Remove an element from this node's bag. The order in which elements are removed
+    are not guaranteed to be the same order it has been inserted. If this node's
+    bag is empty, it will attempt to steal elements from bags of other nodes.
+  */
+  proc remove() : (bool, eltType) {
+    var localThis = getPrivatizedThis;
+    if BAG_NO_FREEZE then return localThis.bag.remove();
+
+    local {
+      localThis.concurrentTasks.add(1);
+
+      // Check if the queue is now 'immutable'.
+      if localThis.frozenState.read() > FREEZE_UNFROZEN {
+        localThis.concurrentTasks.sub(1);
+        return (false, _defaultOf(eltType));
+      }
+    }
+
+    var (elem, hasElem) = localThis.bag.remove();
+    local { localThis.concurrentTasks.sub(1); }
+    return (elem, hasElem);
+  }
+
+  /*
+    Obtain the number of elements held in all bags across all nodes. This method
+    is best-effort if the bags are unfrozen, and can be non-deterministic for
+    concurrent updates across nodes, and may miss elements or even count
+    duplicates resulting from any concurrent insertion or removal operations.
+  */
+  proc size() : int {
+    var sz : atomic int;
+    forall loc in targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      forall segmentIdx in 0..#here.maxTaskPar {
+        sz.add(instance.bag.segments[segmentIdx].nElems.read() : int);
+      }
+    }
+
+    return sz.read();
+  }
+
+  /*
+    Performs a lookup to determine if the requested element exists in this bag.
+    This method is best-effort if the bags are unfrozen, and can be
+    non-deterministic for concurrent updates across nodes, and may miss elements
+    resulting from any concurrent insertion or removal operations.
+  */
+  proc contains(elt : eltType) : bool {
+    var foundElt : atomic bool;
+    forall elem in getPrivatizedThis {
+      if elem == elt {
+        foundElt.write(true);
+      }
+    }
+    return foundElt.read();
+  }
+
+  /*
+    Freeze our state, becoming immutable; we wait for any ongoing concurrent
+    operations to allow them to finish.
+  */
+  proc freeze() {
+    if BAG_NO_FREEZE then return false;
+
+    // Check if already frozen
+    if frozenState.read() == FREEZE_FROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as frozen...
+    coforall loc in targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_FROZEN);
+    }
+
+    return true;
+  }
+
+  /*
+    Unfreezes our state, allowing mutating operations; we wait on any ongoing
+    concurrent operations to allow them to finish.
+  */
+  proc unfreeze() : bool {
+    if BAG_NO_FREEZE then return false;
+    // Check if already unfrozen
+    if frozenState.read() == FREEZE_UNFROZEN {
+      return true;
+    }
+
+    // Mark as transient state...
+    coforall loc in targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_MARKED);
+      localThis.concurrentTasks.waitFor(0);
+    }
+
+    // Mark as unfrozen...
+    coforall loc in targetLocales do on loc {
+      var localThis = getPrivatizedThis;
+      localThis.frozenState.write(FREEZE_UNFROZEN);
+    }
+
+    return true;
+  }
+
+  proc canFreeze() : bool {
+    return !BAG_NO_FREEZE;
+  }
+
+  /*
+    If we are currently frozen. If we are in the middle of a state transition, we
+    wait until it has completed.
+  */
+  proc isFrozen() : bool {
+    if BAG_NO_FREEZE then return false;
+
+    var state = frozenState.read();
+
+    // Current transitioning state, wait it out...
+    while state == FREEZE_MARKED {
+      chpl_task_yield();
+      state = frozenState.read();
+    }
+
+    return state == FREEZE_FROZEN;
+  }
+
+  /*
+    Clear all bags across all nodes in a best-effort approach. Elements added or
+    moved around from concurrent additions or removals (including work stealing)
+    may be missed while clearing.
+  */
+  proc clear() {
+    var localThis = getPrivatizedThis;
+    if !BAG_NO_FREEZE {
+      local {
+        localThis.concurrentTasks.add(1);
+
+        // Check if the queue is now 'immutable'.
+        if localThis.frozenState.read() > FREEZE_UNFROZEN {
+          localThis.concurrentTasks.sub(1);
+          return;
+        }
+      }
+    }
+
+    coforall loc in instance.targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      forall segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+        if segment.acquireIfNonEmpty(STATUS_REMOVE) {
+          var block = segment.headBlock;
+          while block != nil {
+            var tmp = block;
+            block = block.next;
+            delete tmp;
+          }
+
+          segment.headBlock = nil;
+          segment.tailBlock = nil;
+          segment.nElems.write(0);
+          segment.releaseStatus();
+        }
+      }
+    }
+
+    localThis.concurrentTasks.sub(1);
+  }
+
+  /*
+    Triggers a more static approach to load balancing; note that this operation
+    is parallel-safe but is performed in parallel across all `targetLocales` and
+    should only be called at a point of synchronization.
+  */
+  proc balance() {
+    var localThis = getPrivatizedThis;
+    if !BAG_NO_FREEZE {
+      local {
+        localThis.concurrentTasks.add(1);
+
+        // Check if the queue is now 'immutable'.
+        if localThis.frozenState.read() > FREEZE_UNFROZEN {
+          localThis.concurrentTasks.sub(1);
+          return;
+        }
+      }
+    }
+
+    // Phase 1: Acquire all locks from from first node and segment to last
+    // node and segment (our global locking order...)
+    for loc in localThis.targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      for segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+        segment.acquire(STATUS_BALANCE);
+      }
+    }
+
+    // Phase 2: Obtain the average of all elements held in a horizontal segment...
+    var elemsPerSegment : [0..#here.maxTaskPar] int;
+    coforall segmentIdx in 0 .. #here.maxTaskPar {
+      for loc in localThis.targetLocales do on loc {
+        elemsPerSegment[segmentIdx] += getPrivatizedThis.bag.segments[segmentIdx].nElems.read() : int;
+      }
+    }
+    for elem in elemsPerSegment do elem /= here.maxTaskPar;
+
+    // Phase 3: Take elements from segments who have more...
+
+    // Phase 4: Give elements to segments who have less...
+
+    // Phase 5: Release all locks from first node and segment to last node and segment.
+  }
+
+  /*
+    Iterate over each bag in each node. If the bag is frozen, we elide the need
+    to acquire any locks and iterate directly over the bag. If the bag is not
+    frozen, we must acquire not only the needed locks, but also take a snapshot
+    approach, increasing memory consumption.
+  */
+  iter these() : eltType {
+    // Only allowed while frozen due to issue where breaking from a serial iterator
+    // does not cleanup resources, leaving the bag in an undefined state.
+    var frozen = isFrozen();
+
+    for loc in targetLocales {
+      for segmentIdx in 0..#here.maxTaskPar {
+
+        // If the data structure is frozen, we may elide the need to acquire any locks,
+        // and we can iterate directly over the data.
+        if frozen {
+          var instance : DistributedBag(int);
+          on loc do instance = getPrivatizedThis;
+          ref segment = instance.bag.segments[segmentIdx];
+          var block = segment.headBlock;
+
+          while block != nil {
+            for i in 0 .. #block.size {
+              var elt : eltType;
+              on loc do elt = block.elems[i];
+              yield elt;
+            }
+            block = block.next;
+          }
+        }
+        // If the data structure is not frozen, then we must acquire the lock and
+        // produce a snapshot (to reduce the time we hold the lock)
+        else {
+          // The size of the snapshot is only known once we have the lock.
+          // TODO/BUG: c_ptr does not seem to work here and causes a segmentation fault at runtime.
+          var dom : domain(1) = {0..-1};
+          var buffer : [dom] eltType;
+
+          on loc {
+            ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+
+            if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+              var block = segment.headBlock;
+              while block != nil {
+                for i in 0 .. #block.size {
+                    buffer.push_back(block.elems[i]);
+                }
+                block = block.next;
+              }
+              segment.releaseStatus();
+
+            }
+          }
+
+          // Process this chunk if we have one...
+          for elem in buffer {
+            yield elem;
+          }
+        }
+      }
+    }
+  }
+
+  iter these(param tag : iterKind) where tag == iterKind.leader {
+    var frozen = isFrozen();
+    coforall loc in targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      coforall segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+
+        // If the data structure is frozen, we elide the need to acquire any locks,
+        // and we may iterate directly over the data as well.
+        if frozen {
+          var block = segment.headBlock;
+
+          while block != nil {
+            yield (block.size, block.elems);
+            block = block.next;
+          }
+        } else if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+          // Create a snapshot...
+          var block = segment.headBlock;
+          var bufferSz = segment.nElems.read() : int;
+          var buffer = c_malloc(eltType, bufferSz);
+          var bufferOffset = 0;
+
+          while block != nil {
+            if bufferOffset + block.size > bufferSz {
+              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+            }
+            __primitive("chpl_comm_array_put", block.elems[0], here.id, buffer[bufferOffset], block.size);
+            bufferOffset += block.size;
+            block = block.next;
+          }
+
+          // Yield this chunk to be process...
+          segment.releaseStatus();
+          yield (bufferSz, buffer);
+          c_free(buffer);
+        }
+      }
+    }
+  }
+
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+    var (bufferSz, buffer) = followThis;
+    for i in 0 .. #bufferSz {
+      yield buffer[i];
+    }
+  }
+}
 
 /*
   A segment block is an unrolled linked list node that holds a contiguous buffer
@@ -717,419 +1137,5 @@ class Bag {
     }
 
     halt("DEADCODE");
-  }
-}
-
-
-class DistributedBag : Collection {
-  var targetLocDom : domain(1);
-  var targetLocales : [targetLocDom] locale;
-  private var pid : int = -1;
-
-  // Node-local fields
-  private var bag : Bag(eltType);
-  private var concurrentTasks : atomic int;
-  private var frozenState : atomic int;
-
-  proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
-    bag = new Bag(eltType, this);
-    this.targetLocDom = targetLocDom;
-    this.targetLocales = targetLocales;
-    pid = _newPrivatizedClass(this);
-  }
-
-  pragma "no doc"
-  proc DistributedBag(other, pid, type eltType = other.eltType) {
-    bag = new Bag(eltType, this);
-    this.targetLocDom = other.targetLocDom;
-    this.targetLocales = other.targetLocales;
-    this.pid = pid;
-  }
-
-  pragma "no doc"
-  proc dsiPrivatize(pid) {
-    return new DistributedBag(this, pid);
-  }
-
-  pragma "no doc"
-  proc dsiGetPrivatizeData() {
-    return pid;
-  }
-
-  pragma "no doc"
-  inline proc getPrivatizedThis {
-    if this.locale == here {
-      return this;
-    }
-
-    return chpl_getPrivatizedCopy(this.type, pid);
-  }
-
-  /*
-    Obtains a privatized version of this instance. The privatized version is a
-    cloned instance that is allocated on this node, which is useful for eliding
-    communications generated from accessing instance fields. Using another node's
-    instance will significantly penalize performance by bounding overall throughput
-    on the communication between the two nodes.
-  */
-  proc getPrivatizedInstance() {
-    return getPrivatizedThis;
-  }
-
-  /*
-    Insert an element to this node's bag. The ordering is not guaranteed to be
-    preserved. If this instance is privatized, it is an entirely local operation.
-  */
-  proc add(elt : eltType) : bool {
-    var localThis = getPrivatizedThis;
-    if BAG_NO_FREEZE then return localThis.bag.add(elt);
-
-    local {
-      localThis.concurrentTasks.add(1);
-
-      // Check if the queue is now 'immutable'.
-      if localThis.frozenState.read() > FREEZE_UNFROZEN {
-        localThis.concurrentTasks.sub(1);
-        return false;
-      }
-    }
-
-    var result = localThis.bag.add(elt);
-    local { localThis.concurrentTasks.sub(1); }
-    return result;
-  }
-
-  /*
-    Remove an element from this node's bag. The order in which elements are removed
-    are not guaranteed to be the same order it has been inserted. If this node's
-    bag is empty, it will attempt to steal elements from bags of other nodes.
-  */
-  proc remove() : (bool, eltType) {
-    var localThis = getPrivatizedThis;
-    if BAG_NO_FREEZE then return localThis.bag.remove();
-
-    local {
-      localThis.concurrentTasks.add(1);
-
-      // Check if the queue is now 'immutable'.
-      if localThis.frozenState.read() > FREEZE_UNFROZEN {
-        localThis.concurrentTasks.sub(1);
-        return (false, _defaultOf(eltType));
-      }
-    }
-
-    var (elem, hasElem) = localThis.bag.remove();
-    local { localThis.concurrentTasks.sub(1); }
-    return (elem, hasElem);
-  }
-
-  /*
-    Obtain the number of elements held in all bags across all nodes. This method
-    is best-effort if the bags are unfrozen, and can be non-deterministic for
-    concurrent updates across nodes, and may miss elements or even count
-    duplicates resulting from any concurrent insertion or removal operations.
-  */
-  proc size() : int {
-    var sz : atomic int;
-    forall loc in targetLocales do on loc {
-      var instance = getPrivatizedThis;
-      forall segmentIdx in 0..#here.maxTaskPar {
-        sz.add(instance.bag.segments[segmentIdx].nElems.read() : int);
-      }
-    }
-
-    return sz.read();
-  }
-
-  /*
-    Performs a lookup to determine if the requested element exists in this bag.
-    This method is best-effort if the bags are unfrozen, and can be
-    non-deterministic for concurrent updates across nodes, and may miss elements
-    resulting from any concurrent insertion or removal operations.
-  */
-  proc contains(elt : eltType) : bool {
-    var foundElt : atomic bool;
-    forall elem in getPrivatizedThis {
-      if elem == elt {
-        foundElt.write(true);
-      }
-    }
-    return foundElt.read();
-  }
-
-  /*
-    Freeze our state, becoming immutable; we wait for any ongoing concurrent
-    operations to allow them to finish.
-  */
-  proc freeze() {
-    if BAG_NO_FREEZE then return false;
-
-    // Check if already frozen
-    if frozenState.read() == FREEZE_FROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_MARKED);
-      localThis.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as frozen...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_FROZEN);
-    }
-
-    return true;
-  }
-
-  /*
-    Unfreezes our state, allowing mutating operations; we wait on any ongoing
-    concurrent operations to allow them to finish.
-  */
-  proc unfreeze() : bool {
-    if BAG_NO_FREEZE then return false;
-    // Check if already unfrozen
-    if frozenState.read() == FREEZE_UNFROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_MARKED);
-      localThis.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as unfrozen...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_UNFROZEN);
-    }
-
-    return true;
-  }
-
-  proc canFreeze() : bool {
-    return !BAG_NO_FREEZE;
-  }
-
-  /*
-    If we are currently frozen. If we are in the middle of a state transition, we
-    wait until it has completed.
-  */
-  proc isFrozen() : bool {
-    if BAG_NO_FREEZE then return false;
-
-    var state = frozenState.read();
-
-    // Current transitioning state, wait it out...
-    while state == FREEZE_MARKED {
-      chpl_task_yield();
-      state = frozenState.read();
-    }
-
-    return state == FREEZE_FROZEN;
-  }
-
-  /*
-    Clear all bags across all nodes in a best-effort approach. Elements added or
-    moved around from concurrent additions or removals (including work stealing)
-    may be missed while clearing.
-  */
-  proc clear() {
-    var localThis = getPrivatizedThis;
-    if !BAG_NO_FREEZE {
-      local {
-        localThis.concurrentTasks.add(1);
-
-        // Check if the queue is now 'immutable'.
-        if localThis.frozenState.read() > FREEZE_UNFROZEN {
-          localThis.concurrentTasks.sub(1);
-          return;
-        }
-      }
-    }
-
-    coforall loc in instance.targetLocales do on loc {
-      var instance = getPrivatizedThis;
-      forall segmentIdx in 0 .. #here.maxTaskPar {
-        ref segment = instance.bag.segments[segmentIdx];
-        if segment.acquireIfNonEmpty(STATUS_REMOVE) {
-          var block = segment.headBlock;
-          while block != nil {
-            var tmp = block;
-            block = block.next;
-            delete tmp;
-          }
-
-          segment.headBlock = nil;
-          segment.tailBlock = nil;
-          segment.nElems.write(0);
-          segment.releaseStatus();
-        }
-      }
-    }
-
-    localThis.concurrentTasks.sub(1);
-  }
-
-  /*
-    Triggers a more static approach to load balancing; note that this operation
-    is parallel-safe but is performed in parallel across all `targetLocales` and
-    should only be called at a point of synchronization.
-  */
-  proc balance() {
-    var localThis = getPrivatizedThis;
-    if !BAG_NO_FREEZE {
-      local {
-        localThis.concurrentTasks.add(1);
-
-        // Check if the queue is now 'immutable'.
-        if localThis.frozenState.read() > FREEZE_UNFROZEN {
-          localThis.concurrentTasks.sub(1);
-          return;
-        }
-      }
-    }
-
-    // Phase 1: Acquire all locks from from first node and segment to last
-    // node and segment (our global locking order...)
-    for loc in localThis.targetLocales do on loc {
-      var instance = getPrivatizedThis;
-      for segmentIdx in 0 .. #here.maxTaskPar {
-        ref segment = instance.bag.segments[segmentIdx];
-        segment.acquire(STATUS_BALANCE);
-      }
-    }
-
-    // Phase 2: Obtain the average of all elements held in a horizontal segment...
-    var elemsPerSegment : [0..#here.maxTaskPar] int;
-    coforall segmentIdx in 0 .. #here.maxTaskPar {
-      for loc in localThis.targetLocales do on loc {
-        elemsPerSegment[segmentIdx] += getPrivatizedThis.bag.segments[segmentIdx].nElems.read() : int;
-      }
-    }
-    for elem in elemsPerSegment do elem /= here.maxTaskPar;
-
-    // Phase 3: Take elements from segments who have more...
-
-    // Phase 4: Give elements to segments who have less...
-
-    // Phase 5: Release all locks from first node and segment to last node and segment.
-  }
-
-  /*
-    Iterate over each bag in each node. If the bag is frozen, we elide the need
-    to acquire any locks and iterate directly over the bag. If the bag is not
-    frozen, we must acquire not only the needed locks, but also take a snapshot
-    approach, increasing memory consumption.
-  */
-  iter these() : eltType {
-    // Only allowed while frozen due to issue where breaking from a serial iterator
-    // does not cleanup resources, leaving the bag in an undefined state.
-    var frozen = isFrozen();
-
-    for loc in targetLocales {
-      for segmentIdx in 0..#here.maxTaskPar {
-
-        // If the data structure is frozen, we may elide the need to acquire any locks,
-        // and we can iterate directly over the data.
-        if frozen {
-          var instance : DistributedBag(int);
-          on loc do instance = getPrivatizedThis;
-          ref segment = instance.bag.segments[segmentIdx];
-          var block = segment.headBlock;
-
-          while block != nil {
-            for i in 0 .. #block.size {
-              var elt : eltType;
-              on loc do elt = block.elems[i];
-              yield elt;
-            }
-            block = block.next;
-          }
-        }
-        // If the data structure is not frozen, then we must acquire the lock and
-        // produce a snapshot (to reduce the time we hold the lock)
-        else {
-          // The size of the snapshot is only known once we have the lock.
-          // TODO/BUG: c_ptr does not seem to work here and causes a segmentation fault at runtime.
-          var dom : domain(1) = {0..-1};
-          var buffer : [dom] eltType;
-
-          on loc {
-            ref segment = getPrivatizedThis.bag.segments[segmentIdx];
-
-            if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
-              var block = segment.headBlock;
-              while block != nil {
-                for i in 0 .. #block.size {
-                    buffer.push_back(block.elems[i]);
-                }
-                block = block.next;
-              }
-              segment.releaseStatus();
-
-            }
-          }
-
-          // Process this chunk if we have one...
-          for elem in buffer {
-            yield elem;
-          }
-        }
-      }
-    }
-  }
-
-  iter these(param tag : iterKind) where tag == iterKind.leader {
-    var frozen = isFrozen();
-    coforall loc in targetLocales do on loc {
-      var instance = getPrivatizedThis;
-      coforall segmentIdx in 0 .. #here.maxTaskPar {
-        ref segment = instance.bag.segments[segmentIdx];
-
-        // If the data structure is frozen, we elide the need to acquire any locks,
-        // and we may iterate directly over the data as well.
-        if frozen {
-          var block = segment.headBlock;
-
-          while block != nil {
-            yield (block.size, block.elems);
-            block = block.next;
-          }
-        } else if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
-          // Create a snapshot...
-          var block = segment.headBlock;
-          var bufferSz = segment.nElems.read() : int;
-          var buffer = c_malloc(eltType, bufferSz);
-          var bufferOffset = 0;
-
-          while block != nil {
-            if bufferOffset + block.size > bufferSz {
-              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
-            }
-            __primitive("chpl_comm_array_put", block.elems[0], here.id, buffer[bufferOffset], block.size);
-            bufferOffset += block.size;
-            block = block.next;
-          }
-
-          // Yield this chunk to be process...
-          segment.releaseStatus();
-          yield (bufferSz, buffer);
-          c_free(buffer);
-        }
-      }
-    }
-  }
-
-  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
-    var (bufferSz, buffer) = followThis;
-    for i in 0 .. #bufferSz {
-      yield buffer[i];
-    }
   }
 }

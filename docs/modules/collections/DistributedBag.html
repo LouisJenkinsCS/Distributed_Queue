@@ -149,27 +149,52 @@ is double the size of it&#8217;s predecessor.</p>
 <dl class="data">
 <dt id="DistributedBag.WORK_STEALING_RATIO">
 <em class="property">config param </em><code class="descname">WORK_STEALING_RATIO</code> = 0.25<a class="headerlink" href="#DistributedBag.WORK_STEALING_RATIO" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>To prevent stealing too many elements (horizontally) from another node&#8217;s segment
+(hence creating an artifical load imbalance), if the other node&#8217;s segment has
+less than a certain threshold (see <cite>WORK_STEALING_MAX_MEMORY_MB</cite>) but above
+another threshold (see <cite>WORK_STEALING_MINIMUM</cite>), we steal a percentage of their
+elements, leaving them with majority of their elements. This way, the amount the
+other segment loses is proportional to how much it owns, ensuring a balance.</p>
+</dd></dl>
 
 <dl class="data">
 <dt id="DistributedBag.WORK_STEALING_MAX_MEMORY_MB">
 <em class="property">config param </em><code class="descname">WORK_STEALING_MAX_MEMORY_MB</code>: real = 1.0<a class="headerlink" href="#DistributedBag.WORK_STEALING_MAX_MEMORY_MB" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>The maximum amount of work to steal from a horizontal node&#8217;s segment. This
+should be set to a value, in megabytes, that determines the maximum amount of
+data that should be sent in bulk at once. The maximum number of elements is
+determined by: (WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024) / sizeof(eltType).
+For example, if we are storing 8-byte integers and have a 1MB limit, we would
+have a maximum of 125,000 elements stolen at once.</p>
+</dd></dl>
 
 <dl class="data">
 <dt id="DistributedBag.BAG_NO_FREEZE">
 <em class="property">config param </em><code class="descname">BAG_NO_FREEZE</code> = false<a class="headerlink" href="#DistributedBag.BAG_NO_FREEZE" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Determines whether or not we check if we are &#8216;frozen&#8217;. These checks cause a
+significant decline in performance, of about 33%. If the utility is not needed,
+as it is more useful when reads are performed more often than writes, it may
+be disabled for a raw performance boost. If the user attempts to freeze the
+bag with this set to true, it merely returns false; all other checks are elided.</p>
+</dd></dl>
 
 <dl class="data">
 <dt id="DistributedBag.WORK_STEALING_MINIMUM">
 <em class="property">config param </em><code class="descname">WORK_STEALING_MINIMUM</code> = 1<a class="headerlink" href="#DistributedBag.WORK_STEALING_MINIMUM" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>The minimum number of elements a horizontal segment must have to become eligible
+to be stolen from. This may be useful if some segments produce less elements than
+others and should not be stolen from.</p>
+</dd></dl>
 
 <dl class="class">
 <dt id="DistributedBag.DistributedBag">
 <em class="property">class </em><code class="descname">DistributedBag</code>: Collection<a class="headerlink" href="#DistributedBag.DistributedBag" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="attribute">
+<dd><p>A parallel-safe distributed multiset implementation that scales in terms of
+both nodes and processors per node. This data structure is unordered and employs
+its own work-stealing algorithm, and provides a means to obtain a privatized instance of
+the data structure for maximized performance. This is an ideal backbone for a
+means to distribute work across nodes.</p>
+<dl class="attribute">
 <dt id="DistributedBag.DistributedBag.targetLocDom">
 <em class="property">var </em><code class="descname">targetLocDom</code>: domain(1)<a class="headerlink" href="#DistributedBag.DistributedBag.targetLocDom" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -251,6 +276,22 @@ concurrent operations to allow them to finish.</p>
 <em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedBag.DistributedBag.isFrozen" title="Permalink to this definition">¶</a></dt>
 <dd><p>If we are currently frozen. If we are in the middle of a state transition, we
 wait until it has completed.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.clear">
+<em class="property">proc </em><code class="descname">clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedBag.DistributedBag.clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clear all bags across all nodes in a best-effort approach. Elements added or
+moved around from concurrent additions or removals (including work stealing)
+may be missed while clearing.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="DistributedBag.DistributedBag.balance">
+<em class="property">proc </em><code class="descname">balance</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedBag.DistributedBag.balance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Triggers a more static approach to load balancing; note that this operation
+is parallel-safe but is performed in parallel across all <cite>targetLocales</cite> and
+should only be called at a point of synchronization.</p>
 </dd></dl>
 
 <dl class="itermethod">

@@ -18,13 +18,49 @@ DistributedBag
 
 .. data:: config param WORK_STEALING_RATIO = 0.25
 
+   
+   To prevent stealing too many elements (horizontally) from another node's segment
+   (hence creating an artifical load imbalance), if the other node's segment has
+   less than a certain threshold (see `WORK_STEALING_MAX_MEMORY_MB`) but above
+   another threshold (see `WORK_STEALING_MINIMUM`), we steal a percentage of their
+   elements, leaving them with majority of their elements. This way, the amount the
+   other segment loses is proportional to how much it owns, ensuring a balance.
+
 .. data:: config param WORK_STEALING_MAX_MEMORY_MB: real = 1.0
+
+   
+   The maximum amount of work to steal from a horizontal node's segment. This
+   should be set to a value, in megabytes, that determines the maximum amount of
+   data that should be sent in bulk at once. The maximum number of elements is
+   determined by: (WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024) / sizeof(eltType).
+   For example, if we are storing 8-byte integers and have a 1MB limit, we would
+   have a maximum of 125,000 elements stolen at once.
 
 .. data:: config param BAG_NO_FREEZE = false
 
+   
+   Determines whether or not we check if we are 'frozen'. These checks cause a
+   significant decline in performance, of about 33%. If the utility is not needed,
+   as it is more useful when reads are performed more often than writes, it may
+   be disabled for a raw performance boost. If the user attempts to freeze the
+   bag with this set to true, it merely returns false; all other checks are elided.
+
 .. data:: config param WORK_STEALING_MINIMUM = 1
 
+   
+   The minimum number of elements a horizontal segment must have to become eligible
+   to be stolen from. This may be useful if some segments produce less elements than
+   others and should not be stolen from.
+
 .. class:: DistributedBag : Collection
+
+   
+   A parallel-safe distributed multiset implementation that scales in terms of
+   both nodes and processors per node. This data structure is unordered and employs
+   its own work-stealing algorithm, and provides a means to obtain a privatized instance of
+   the data structure for maximized performance. This is an ideal backbone for a
+   means to distribute work across nodes.
+
 
    .. attribute:: var targetLocDom: domain(1)
 
@@ -96,6 +132,22 @@ DistributedBag
       
       If we are currently frozen. If we are in the middle of a state transition, we
       wait until it has completed.
+      
+
+   .. method:: proc clear()
+
+      
+      Clear all bags across all nodes in a best-effort approach. Elements added or
+      moved around from concurrent additions or removals (including work stealing)
+      may be missed while clearing.
+      
+
+   .. method:: proc balance()
+
+      
+      Triggers a more static approach to load balancing; note that this operation
+      is parallel-safe but is performed in parallel across all `targetLocales` and
+      should only be called at a point of synchronization.
       
 
    .. itermethod:: iter these(): eltType

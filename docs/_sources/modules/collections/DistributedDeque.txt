@@ -23,7 +23,9 @@ DistributedDeque
 .. class:: DistributedDeque : Collection
 
    
-   An unbounded queue that is distributed across nodes.
+   A parallel-safe scalable distributed double-ended queue that supports both
+   insertion and removal from either end of the queue. Can be used as a Queue,
+   Stack, or even a List.
 
 
    .. attribute:: var cap
@@ -131,9 +133,13 @@ DistributedDeque
    .. itermethod:: iter these(): eltType
 
       
-      Iterate over the queue in any arbitrary order. If an ordering is desired,
-      see both `LIFO` and `FIFO` iterators.
+      Iterate over all elements in the deque. This iterator does not yield in any
+      particular order (see `FIFO` or `LIFO` for specific ordering).
       
+
+   .. itermethod:: iter these(param tag: iterKind)
+
+   .. itermethod:: iter these(param tag: iterKind, followThis)
 
    .. itermethod:: iter FIFO(): eltType
 
@@ -148,10 +154,6 @@ DistributedDeque
       Iterates over the deque in Last-In-First-Out order, from back to front. The
       deque must be frozen or it will result in a halt. This operation is sequential.
       
-
-   .. itermethod:: iter these(param tag: iterKind)
-
-   .. itermethod:: iter these(param tag: iterKind, followThis)
 
    .. method:: proc deinit()
 

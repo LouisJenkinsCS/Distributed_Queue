@@ -154,7 +154,9 @@
 <dl class="class">
 <dt id="DistributedDeque.DistributedDeque">
 <em class="property">class </em><code class="descname">DistributedDeque</code>: Collection<a class="headerlink" href="#DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
-<dd><p>An unbounded queue that is distributed across nodes.</p>
+<dd><p>A parallel-safe scalable distributed double-ended queue that supports both
+insertion and removal from either end of the queue. Can be used as a Queue,
+Stack, or even a List.</p>
 <dl class="attribute">
 <dt id="DistributedDeque.DistributedDeque.cap">
 <em class="property">var </em><code class="descname">cap</code><a class="headerlink" href="#DistributedDeque.DistributedDeque.cap" title="Permalink to this definition">¶</a></dt>
@@ -272,9 +274,19 @@ frozen, and sequentially otherwise.</p>
 <dl class="itermethod">
 <dt id="DistributedDeque.DistributedDeque.these">
 <em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.these" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterate over the queue in any arbitrary order. If an ordering is desired,
-see both <cite>LIFO</cite> and <cite>FIFO</cite> iterators.</p>
+<dd><p>Iterate over all elements in the deque. This iterator does not yield in any
+particular order (see <cite>FIFO</cite> or <cite>LIFO</cite> for specific ordering).</p>
 </dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="itermethod">
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
 
 <dl class="itermethod">
 <dt id="DistributedDeque.DistributedDeque.FIFO">
@@ -289,16 +301,6 @@ deque must be frozen or it will result in a halt. This operation is sequential.<
 <dd><p>Iterates over the deque in Last-In-First-Out order, from back to front. The
 deque must be frozen or it will result in a halt. This operation is sequential.</p>
 </dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
-<dd></dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
-<dd></dd></dl>
 
 <dl class="method">
 <dt id="DistributedDeque.DistributedDeque.deinit">

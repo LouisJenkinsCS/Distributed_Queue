@@ -1,7 +1,7 @@
 use Collection;
 
 /*
-  A parallel-safe distributed deque. A deque is a double-ended queue that supports
+  A parallel-safe scalable distributed deque. A deque is a double-ended queue that supports
   insertion and removal from both ends of the queue, effectively supporting both
   FIFO, LIFO, and a Total ordering, where the order in which you add them will be
   the exact order you remove them in; for emphasis, a Deque can be used as a Queue,
@@ -13,8 +13,6 @@ use Collection;
   levels: global and local. At a global level, we use simple fetchAdd and fetchSub
   counters to denote which local deque we apply our operation to, and at a local level
   we use an unrolled linked list which further has its own (non-atomic) counter.
-  By maintaining an
-
 */
 
 /*
@@ -310,7 +308,9 @@ class LocalDeque {
 }
 
 /*
-  An unbounded queue that is distributed across nodes.
+  A parallel-safe scalable distributed double-ended queue that supports both
+  insertion and removal from either end of the queue. Can be used as a Queue,
+  Stack, or even a List.
 */
 class DistributedDeque : Collection {
   var cap;
@@ -769,8 +769,8 @@ class DistributedDeque : Collection {
   }
 
   /*
-    Iterate over the queue in any arbitrary order. If an ordering is desired,
-    see both `LIFO` and `FIFO` iterators.
+    Iterate over all elements in the deque. This iterator does not yield in any
+    particular order (see `FIFO` or `LIFO` for specific ordering).
   */
   iter these() : eltType {
     var frozen = isFrozen();
@@ -793,6 +793,32 @@ class DistributedDeque : Collection {
 
       if !frozen then slot.lock$;
     }
+  }
+
+  iter these(param tag : iterKind) where tag == iterKind.leader {
+    coforall slot in getPrivatizedThis.slots do on slot do yield slot;
+  }
+
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+    var frozen = isFrozen();
+
+    if !frozen then followThis.lock$ = true;
+    var node = followThis.head;
+
+    while node != nil {
+      var headIdx = node.headIdx;
+      for 1 .. node.size {
+        yield node.elements[headIdx];
+
+        headIdx += 1;
+        if headIdx > DEQUE_BLOCK_SIZE {
+          headIdx = 1;
+        }
+      }
+      node = node.next;
+    }
+
+    if !frozen then followThis.lock$;
   }
 
   /*
@@ -919,32 +945,6 @@ class DistributedDeque : Collection {
         nodes[idx] = (size, tailIdx, node);
       }
     }
-  }
-
-  iter these(param tag : iterKind) where tag == iterKind.leader {
-    coforall slot in getPrivatizedThis.slots do on slot do yield slot;
-  }
-
-  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
-    var frozen = isFrozen();
-
-    if !frozen then followThis.lock$ = true;
-    var node = followThis.head;
-
-    while node != nil {
-      var headIdx = node.headIdx;
-      for 1 .. node.size {
-        yield node.elements[headIdx];
-
-        headIdx += 1;
-        if headIdx > DEQUE_BLOCK_SIZE {
-          headIdx = 1;
-        }
-      }
-      node = node.next;
-    }
-
-    if !frozen then followThis.lock$;
   }
 
   proc ~DistributedDeque() {
