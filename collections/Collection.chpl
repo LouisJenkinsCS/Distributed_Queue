@@ -88,6 +88,9 @@ class Collection {
 
 /*
   Syntactic sugar for 'add'.
+
+  BUG: Compiler produces a warning that 'c' 'should' be a ref, when it is not needed
+  because it is a class and can be used by value. Need a pragma to disable this?
 */
 proc +=(ref c : Collection(?eltType), elt : eltType) {
   c.add(elt);

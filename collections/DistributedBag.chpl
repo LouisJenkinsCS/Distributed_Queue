@@ -123,12 +123,16 @@ config param WORK_STEALING_MINIMUM = 1;
 class DistributedBag : Collection {
   var targetLocDom : domain(1);
   var targetLocales : [targetLocDom] locale;
-  private var pid : int = -1;
+  pragma "no doc"
+  var pid : int = -1;
 
   // Node-local fields
-  private var bag : Bag(eltType);
-  private var concurrentTasks : atomic int;
-  private var frozenState : atomic int;
+  pragma "no doc"
+  var bag : Bag(eltType);
+  pragma "no doc"
+  var concurrentTasks : atomic int;
+  pragma "no doc"
+  var frozenState : atomic int;
 
   proc DistributedBag(type eltType, targetLocales : [?targetLocDom] locale = Locales) {
     bag = new Bag(eltType, this);
@@ -352,7 +356,7 @@ class DistributedBag : Collection {
       }
     }
 
-    coforall loc in instance.targetLocales do on loc {
+    coforall loc in localThis.targetLocales do on loc {
       var instance = getPrivatizedThis;
       forall segmentIdx in 0 .. #here.maxTaskPar {
         ref segment = instance.bag.segments[segmentIdx];
@@ -404,20 +408,79 @@ class DistributedBag : Collection {
       }
     }
 
-    // Phase 2: Obtain the average of all elements held in a horizontal segment...
-    var elemsPerSegment : [0..#here.maxTaskPar] int;
+    // Phase 2: Concurrently redistribute elements from segments which contain
+    // more than the computed average.
     coforall segmentIdx in 0 .. #here.maxTaskPar {
+      var nSegmentElems : [localThis.targetLocales.size] int;
+      var locIdx = 0;
       for loc in localThis.targetLocales do on loc {
-        elemsPerSegment[segmentIdx] += getPrivatizedThis.bag.segments[segmentIdx].nElems.read() : int;
+        var nElems = getPrivatizedThis.bag.segments[segmentIdx].nElems.read() : int;
+        nSegmentElems[locIdx] = nElems;
+        locIdx += 1;
+      }
+
+      // Find the average and the excess. The excess is calculated as the amount
+      // of elements a segment has over the average, which is used to calculate
+      // the buffer size for each segment.
+      var total = (+ reduce nSegmentElems);
+      var avg = total / locIdx;
+      var excess : int;
+      for nElems in nSegmentElems {
+        if nElems > avg {
+          excess += nElems - avg;
+        }
+      }
+
+      // Allocate buffer, which holds the 'excess' elements for redistribution.
+      // Then fill it.
+      var buffer = c_malloc(eltType, excess);
+      var bufferOffset = 0;
+      for loc in localThis.targetLocales do on loc {
+        ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+        var nElems = segment.nElems.read() : int;
+        if nElems > avg {
+          var take = nElems - avg;
+          var tmpBuffer = __primitive("+", buffer, bufferOffset);
+          segment.transferElements(tmpBuffer, take, buffer.locale.id);
+          bufferOffset += take;
+        }
+      }
+
+      // With the excess elements, redistribute it...
+      bufferOffset = 0;
+      for loc in localThis.targetLocales do on loc {
+        ref segment = getPrivatizedThis.bag.segments[segmentIdx];
+        var nElems = segment.nElems.read() : int;
+        writeln(segmentIdx, ": Avg=", avg);
+        if avg > nElems {
+          var give = avg - nElems;
+          writeln(segmentIdx, ": avg(", avg, ") > nElems(", nElems, ")");
+          var tmpBuffer : c_ptr(eltType);
+          writeln(segmentIdx, ": buffer : string = ", buffer : string);
+          on buffer.locale do tmpBuffer = __primitive("+", buffer, bufferOffset);
+          segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
+          writeln(segmentIdx, ": Wrote buffer offsets ", bufferOffset, " to ", bufferOffset + give);
+          bufferOffset += give;
+        }
+      }
+
+      // Lastly, if there are items left over, just add them to our locale's segment.
+      if excess > bufferOffset {
+        ref segment = localThis.bag.segments[segmentIdx];
+        var give = excess - bufferOffset;
+        var tmpBuffer = __primitive("+", buffer, bufferOffset);
+        segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
       }
     }
-    for elem in elemsPerSegment do elem /= here.maxTaskPar;
 
-    // Phase 3: Take elements from segments who have more...
-
-    // Phase 4: Give elements to segments who have less...
-
-    // Phase 5: Release all locks from first node and segment to last node and segment.
+    // Phase 3: Release all locks from first node and segment to last node and segment.
+    for loc in localThis.targetLocales do on loc {
+      var instance = getPrivatizedThis;
+      for segmentIdx in 0 .. #here.maxTaskPar {
+        ref segment = instance.bag.segments[segmentIdx];
+        segment.releaseStatus();
+      }
+    }
   }
 
   /*
@@ -710,7 +773,7 @@ record BagSegment {
     nElems.sub(n : uint);
   }
 
-  inline proc addElementsPtr(ptr, n) {
+  inline proc addElementsPtr(ptr, n, locId = here.id) {
     var offset = 0;
     while offset < n {
       var block = tailBlock;
@@ -731,7 +794,7 @@ record BagSegment {
       var nLeft = n - offset;
       var nSpace = block.cap - block.size;
       var nFill = min(nLeft, nSpace);
-      __primitive("chpl_comm_array_put", ptr[offset], here.id, block.elems[block.size], nFill);
+      __primitive("chpl_comm_array_get", block.elems[block.size], locId, ptr[offset], nFill);
       block.size = block.size + nFill;
       offset = offset + nFill;
     }
@@ -1137,5 +1200,24 @@ class Bag {
     }
 
     halt("DEADCODE");
+  }
+}
+
+proc main() {
+  var found : [1..1000] bool;
+  var bag = new DistributedBag(int);
+  forall i in 1 .. 1000 {
+    bag.add(i);
+  }
+
+  bag.balance();
+  forall elt in bag {
+    found[elt] = true;
+  }
+
+  for f in found {
+    if f == false {
+      halt("Did not find an index...");
+    }
   }
 }
