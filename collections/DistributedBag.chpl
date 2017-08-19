@@ -80,17 +80,37 @@ private const REMOVE_WORST_CASE = 4;
   is double the size of it's predecessor.
 */
 config param INITIAL_BLOCK_SIZE = 1024;
-// The amount we attempt to steal from each segment of other nodes. Helps to
-// further ensure a proper load balance by not leaving segments empty by stealing
-// on average 1/4 of their work, leaving them with 3/4. As we steal from *all* other
-// segments, it is imperative that this stays low to prevent a ping-pong effect on
-// work propagating from excessive work stealing. We steal at least one element,
-// but no more than the amount of data that can be transferred within a single
-// bulk transfer, measured in megabytes.
+/*
+  To prevent stealing too many elements (horizontally) from another node's segment
+  (hence creating an artifical load imbalance), if the other node's segment has
+  less than a certain threshold (see `WORK_STEALING_MAX_MEMORY_MB`) but above
+  another threshold (see `WORK_STEALING_MINIMUM`), we steal a percentage of their
+  elements, leaving them with majority of their elements. This way, the amount the
+  other segment loses is proportional to how much it owns, ensuring a balance.
+*/
 config param WORK_STEALING_RATIO = 0.25;
+/*
+  The maximum amount of work to steal from a horizontal node's segment. This
+  should be set to a value, in megabytes, that determines the maximum amount of
+  data that should be sent in bulk at once. The maximum number of elements is
+  determined by: (WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024) / sizeof(eltType).
+  For example, if we are storing 8-byte integers and have a 1MB limit, we would
+  have a maximum of 125,000 elements stolen at once.
+*/
 config param WORK_STEALING_MAX_MEMORY_MB : real = 1.0;
+/*
+  Determines whether or not we check if we are 'frozen'. These checks cause a
+  significant decline in performance, of about 33%. If the utility is not needed,
+  as it is more useful when reads are performed more often than writes, it may
+  be disabled for a raw performance boost. If the user attempts to freeze the
+  bag with this set to true, it merely returns false; all other checks are elided.
+*/
 config param BAG_NO_FREEZE = false;
-// The amount of elements a segment must have to be stolen from.
+/*
+  The minimum number of elements a horizontal segment must have to become eligible
+  to be stolen from. This may be useful if some segments produce less elements than
+  others and should not be stolen from.
+*/
 config param WORK_STEALING_MINIMUM = 1;
 
 /*
