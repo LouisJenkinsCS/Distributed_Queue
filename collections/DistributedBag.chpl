@@ -436,31 +436,41 @@ class DistributedBag : Collection {
       var buffer = c_malloc(eltType, excess);
       var bufferOffset = 0;
       for loc in localThis.targetLocales do on loc {
+        var average = avg;
         ref segment = getPrivatizedThis.bag.segments[segmentIdx];
         var nElems = segment.nElems.read() : int;
-        if nElems > avg {
-          var take = nElems - avg;
+        if nElems > average {
+          var take = nElems - average;
           var tmpBuffer = __primitive("+", buffer, bufferOffset);
           segment.transferElements(tmpBuffer, take, buffer.locale.id);
           bufferOffset += take;
+          writeln(segmentIdx, ": Took ", take, " elements from locale ", loc.id);
         }
       }
 
       // With the excess elements, redistribute it...
+      // BUG: Cannot seem to actually move data this way...
       bufferOffset = 0;
       for loc in localThis.targetLocales do on loc {
+        var average = avg;
         ref segment = getPrivatizedThis.bag.segments[segmentIdx];
         var nElems = segment.nElems.read() : int;
-        writeln(segmentIdx, ": Avg=", avg);
-        if avg > nElems {
-          var give = avg - nElems;
-          writeln(segmentIdx, ": avg(", avg, ") > nElems(", nElems, ")");
-          var tmpBuffer : c_ptr(eltType);
-          writeln(segmentIdx, ": buffer : string = ", buffer : string);
-          on buffer.locale do tmpBuffer = __primitive("+", buffer, bufferOffset);
-          segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
-          writeln(segmentIdx, ": Wrote buffer offsets ", bufferOffset, " to ", bufferOffset + give);
-          bufferOffset += give;
+        if average > nElems {
+          writeln(segmentIdx, ": average(", average, ") > nElems(", nElems, ")");
+          var give = average - nElems;
+          writeln("give(", give, ") = average(", average, ") - nElems(", nElems, ");");
+
+          var arr : [1..give] eltType;
+          on bufferOffset {
+            var tmpBuffer = buffer;
+            for i in 1 .. give {
+              arr[i] = tmpBuffer[bufferOffset];
+              bufferOffset += 1;
+            }
+          }
+          for i in 1 .. give {
+            segment.addElements(arr[i]);
+          }
         }
       }
 
@@ -471,6 +481,8 @@ class DistributedBag : Collection {
         var tmpBuffer = __primitive("+", buffer, bufferOffset);
         segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
       }
+
+      c_free(buffer);
     }
 
     // Phase 3: Release all locks from first node and segment to last node and segment.
@@ -773,7 +785,7 @@ record BagSegment {
     nElems.sub(n : uint);
   }
 
-  inline proc addElementsPtr(ptr, n, locId = here.id) {
+  proc addElementsPtr(ptr, n, locId = here.id) {
     var offset = 0;
     while offset < n {
       var block = tailBlock;
