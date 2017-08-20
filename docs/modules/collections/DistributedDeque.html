@@ -31,7 +31,6 @@
 
   
     <link rel="top" title="chpldoc 0.0.1 documentation" href="../../index.html"/>
-        <link rel="next" title="SynchronizedList" href="SynchronizedList.html"/>
         <link rel="prev" title="DistributedBag" href="DistributedBag.html"/> 
 
   
@@ -88,7 +87,6 @@
 <li class="toctree-l1"><a class="reference internal" href="Collection.html">Collection</a></li>
 <li class="toctree-l1"><a class="reference internal" href="DistributedBag.html">DistributedBag</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="">DistributedDeque</a></li>
-<li class="toctree-l1"><a class="reference internal" href="SynchronizedList.html">SynchronizedList</a></li>
 </ul>
 
             
@@ -159,17 +157,20 @@ insertion and removal from either end of the queue. Can be used as a Queue,
 Stack, or even a List.</p>
 <dl class="attribute">
 <dt id="DistributedDeque.DistributedDeque.cap">
-<em class="property">var </em><code class="descname">cap</code><a class="headerlink" href="#DistributedDeque.DistributedDeque.cap" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<em class="property">var </em><code class="descname">cap</code>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.cap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Capacity, the maximum number of elements a Deque can hold. A <cite>cap</cite> of -1 is
+considered unbounded.</p>
+</dd></dl>
 
 <dl class="attribute">
 <dt id="DistributedDeque.DistributedDeque.targetLocales">
-<em class="property">var </em><code class="descname">targetLocales</code><a class="headerlink" href="#DistributedDeque.DistributedDeque.targetLocales" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<em class="property">var </em><code class="descname">targetLocales</code>: [targetLocDom] locale<a class="headerlink" href="#DistributedDeque.DistributedDeque.targetLocales" title="Permalink to this definition">¶</a></dt>
+<dd><p>Locales to distribute the <cite>Deque</cite> across.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="DistributedDeque.DistributedDeque.DistributedDeque">
-<em class="property">proc </em><code class="descname">DistributedDeque</code><span class="sig-paren">(</span><em>type eltType</em>, <em>cap = -1</em>, <em>targetLocales = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
+<em class="property">proc </em><code class="descname">DistributedDeque</code><span class="sig-paren">(</span><em>type eltType</em>, <em>cap: int = -1</em>, <em>targetLocales: [?locDom] locale = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
@@ -317,8 +318,6 @@ deque must be frozen or it will result in a halt. This operation is sequential.<
           <footer>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="SynchronizedList.html" class="btn btn-neutral float-right" title="SynchronizedList" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="DistributedBag.html" class="btn btn-neutral" title="DistributedBag" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>

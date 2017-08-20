@@ -12,16 +12,13 @@ config param isBag = false;
 config param nElems = 1000;
 const expected = (nElems * (nElems + 1)) / 2;
 
-var c : Collection(int);
-if isBoundedDeque {
-  c = new DistributedDeque(int, cap=nElems);
-} else if isDeque {
-  c = new DistributedDeque(int);
-} else if isBag {
-  c = new DistributedBag(int);
-} else {
-  halt("Require 'isBoundedDeque', 'isDeque', or 'isBag' to be set...");
-}
+var c = (
+  if isBoundedDeque then new DistributedDeque(int, cap=nElems)
+  else if isDeque then new DistributedDeque(int)
+  else if isBag then new DistributedBag(int)
+  else compilerError("Require 'isBoundedDeque', 'isDeque', or 'isBag' to be set...")
+);
+
 
 // Fill...
 for i in 1 .. nElems {

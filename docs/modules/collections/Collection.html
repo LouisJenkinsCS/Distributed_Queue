@@ -88,7 +88,6 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="">Collection</a></li>
 <li class="toctree-l1"><a class="reference internal" href="DistributedBag.html">DistributedBag</a></li>
 <li class="toctree-l1"><a class="reference internal" href="DistributedDeque.html">DistributedDeque</a></li>
-<li class="toctree-l1"><a class="reference internal" href="SynchronizedList.html">SynchronizedList</a></li>
 </ul>
 
             
@@ -144,12 +143,11 @@
 <em class="property">class </em><code class="descname">Collection</code><a class="headerlink" href="#Collection.Collection" title="Permalink to this definition">¶</a></dt>
 <dd><p>A &#8216;Collection&#8217; is a data structure, a container for elements that provide support
 for insert, lookup, remove, and iteration operations.</p>
-<p>BUG: Compiler does not currently allow overloading standalone or leader/follower
-iterators, and as such only serial iterators may be used with a Collection.</p>
 <dl class="attribute">
 <dt id="Collection.Collection.eltType">
 <em class="property">type </em><code class="descname">eltType</code><a class="headerlink" href="#Collection.Collection.eltType" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>The type of element that this Collection holds.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.add">
@@ -161,63 +159,82 @@ iterators, and as such only serial iterators may be used with a Collection.</p>
 <dt id="Collection.Collection.remove">
 <em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#Collection.Collection.remove" title="Permalink to this definition">¶</a></dt>
 <dd><p>Removes an arbitrary element from this data structure.</p>
-<p>BUG: Compiler will segfault if the returned value is not captured at callsite.
-&#8216;var capturedRetval = c.remove()&#8217;
-BUG: Loop Invariant Code Motion causes undefined behavior if assigned to a
-variable declared outside of loop. Use &#8216;&#8211;no-loop-invariant-code-motion&#8217; flag...</p>
+<p><strong>BUG:</strong> Compiler will segfault if the returned value is not captured at callsite.</p>
+<p><strong>FIX:</strong> Ensure that you always capture the return value...</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>var capturedRetval = c.remove()
+</pre></div>
+</div>
+<p><strong>BUG:</strong> Loop Invariant Code Motion causes undefined behavior if assigned to a
+variable declared outside of loop</p>
+<p><strong>FIX:</strong> Use the <cite>&#8211;no-loop-invariant-code-motion</cite> to disable LICM.
+Otherwise, just make sure you always capture the return value inside of a loop
+in a variable not declared outside of loop...</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>for i in 1 .. N {
+  var retval = c.remove();
+}
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.contains">
 <em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.contains" title="Permalink to this definition">¶</a></dt>
-<dd><p>Lookup an element in the data structure, returning whether or not it was present.</p>
+<dd><p>Determine whether an element exists in this collection.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.clear">
 <em class="property">proc </em><code class="descname">clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#Collection.Collection.clear" title="Permalink to this definition">¶</a></dt>
-<dd><p>Clears all elements from this data structure. By default, this will repeatedly
-invoke &#8216;remove&#8217; until emptied.</p>
+<dd><p>Clears all elements in this collection.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.isEmpty">
 <em class="property">proc </em><code class="descname">isEmpty</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.isEmpty" title="Permalink to this definition">¶</a></dt>
-<dd><p>Check if this data structure is empty. By default, this will check if <cite>size</cite>
-returns 0.</p>
+<dd><p>Check if this data structure is empty.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.size">
 <em class="property">proc </em><code class="descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.Collection.size" title="Permalink to this definition">¶</a></dt>
-<dd><p>Obtain the number of elements contained in this data structure.</p>
+<dd><p>Obtain the number of elements contained in this collection.</p>
 </dd></dl>
 
 <dl class="itermethod">
 <dt id="Collection.Collection.these">
 <em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#Collection.Collection.these" title="Permalink to this definition">¶</a></dt>
 <dd><p>Iterate over all elements in the data structure.</p>
+<p><strong>BUG:</strong> Compiler does not currently allow overloading standalone or leader/follower
+iterators, and as such only serial iterators may be used with the base type.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.freeze">
 <em class="property">proc </em><code class="descname">freeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.freeze" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Declares this collection immutable.</p>
+<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.unfreeze">
 <em class="property">proc </em><code class="descname">unfreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.unfreeze" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Declares this collection mutable.</p>
+<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.canFreeze">
 <em class="property">proc </em><code class="descname">canFreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.canFreeze" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Whether this collection supports freezing.</p>
+<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="Collection.Collection.isFrozen">
 <em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.isFrozen" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Determines if this collection is currently frozen.</p>
+<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
+</dd></dl>
 
 </dd></dl>
 
@@ -225,6 +242,10 @@ returns 0.</p>
 <dt>
 <code class="descname">proc +=(ref c: Collection(?eltType), elt: eltType)</code></dt>
 <dd><p>Syntactic sugar for &#8216;add&#8217;.</p>
+<p><strong>BUG:</strong> Compiler produces a warning that <cite>c</cite> should be a <cite>ref</cite>, when it is not needed
+because it is a class and can be used by value. Need a pragma to disable this?
+As such, this cannot be used where <cite>ref</cite> intents cannot be used, such as <code class="docutils literal"><span class="pre">forall</span></code>
+and <code class="docutils literal"><span class="pre">coforall</span></code> loops.</p>
 </dd></dl>
 
 </div>

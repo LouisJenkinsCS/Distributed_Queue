@@ -62,9 +62,11 @@ DistributedBag
    means to distribute work across nodes.
 
 
-   .. attribute:: var targetLocDom: domain(1)
-
    .. attribute:: var targetLocales: [targetLocDom] locale
+
+      
+      The locales to allocate bags for and load balance across.
+      
 
    .. method:: proc DistributedBag(type eltType, targetLocales: [?targetLocDom] locale = Locales)
 

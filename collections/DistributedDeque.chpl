@@ -313,8 +313,17 @@ class LocalDeque {
   Stack, or even a List.
 */
 class DistributedDeque : Collection {
-  var cap;
-  var targetLocales;
+  /*
+    Capacity, the maximum number of elements a Deque can hold. A `cap` of -1 is
+    considered unbounded.
+  */
+  var cap : int;
+  pragma "no doc"
+  var targetLocDom : domain(1);
+  /*
+    Locales to distribute the `Deque` across.
+  */
+  var targetLocales : [targetLocDom] locale;
 
   // Privatization id
   pragma "no doc"
@@ -342,15 +351,18 @@ class DistributedDeque : Collection {
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
   // to reduce the amount of contention.
   pragma "no doc"
-  var nSlots = here.maxTaskPar * targetLocales.size;
+  var nSlots : int;
   pragma "no doc"
-  var slotSpace = {0..#nSlots};
+  var slotSpace = {0..-1};
   pragma "no doc"
   var slots : [slotSpace] LocalDeque(eltType);
 
-  proc DistributedDeque(type eltType, cap=-1, targetLocales=Locales) {
-    nSlots = here.maxTaskPar * targetLocales.size;
-    slotSpace = {0..#nSlots};
+  proc DistributedDeque(type eltType, cap : int = -1, targetLocales : [?locDom] locale =Locales) {
+    this.cap = cap;
+    this.nSlots = here.maxTaskPar * targetLocales.size;
+    this.slotSpace = {0..#this.nSlots};
+    this.targetLocDom = locDom;
+    this.targetLocales = targetLocales;
 
     // Initialize each slot. We use a round-robin algorithm.
     var idx : atomic int;

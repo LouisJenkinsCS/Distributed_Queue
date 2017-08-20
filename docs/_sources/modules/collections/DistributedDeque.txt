@@ -28,11 +28,20 @@ DistributedDeque
    Stack, or even a List.
 
 
-   .. attribute:: var cap
+   .. attribute:: var cap: int
 
-   .. attribute:: var targetLocales
+      
+      Capacity, the maximum number of elements a Deque can hold. A `cap` of -1 is
+      considered unbounded.
+      
 
-   .. method:: proc DistributedDeque(type eltType, cap = -1, targetLocales = Locales)
+   .. attribute:: var targetLocales: [targetLocDom] locale
+
+      
+      Locales to distribute the `Deque` across.
+      
+
+   .. method:: proc DistributedDeque(type eltType, cap: int = -1, targetLocales: [?locDom] locale = Locales)
 
    .. method:: proc add(elt: eltType): bool
 

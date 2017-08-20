@@ -88,7 +88,6 @@
 <li class="toctree-l1"><a class="reference internal" href="Collection.html">Collection</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="">DistributedBag</a></li>
 <li class="toctree-l1"><a class="reference internal" href="DistributedDeque.html">DistributedDeque</a></li>
-<li class="toctree-l1"><a class="reference internal" href="SynchronizedList.html">SynchronizedList</a></li>
 </ul>
 
             
@@ -195,14 +194,10 @@ its own work-stealing algorithm, and provides a means to obtain a privatized ins
 the data structure for maximized performance. This is an ideal backbone for a
 means to distribute work across nodes.</p>
 <dl class="attribute">
-<dt id="DistributedBag.DistributedBag.targetLocDom">
-<em class="property">var </em><code class="descname">targetLocDom</code>: domain(1)<a class="headerlink" href="#DistributedBag.DistributedBag.targetLocDom" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="attribute">
 <dt id="DistributedBag.DistributedBag.targetLocales">
 <em class="property">var </em><code class="descname">targetLocales</code>: [targetLocDom] locale<a class="headerlink" href="#DistributedBag.DistributedBag.targetLocales" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>The locales to allocate bags for and load balance across.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="DistributedBag.DistributedBag.DistributedBag">

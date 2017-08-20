@@ -121,7 +121,11 @@ config param WORK_STEALING_MINIMUM = 1;
   means to distribute work across nodes.
 */
 class DistributedBag : Collection {
+  pragma "no doc"
   var targetLocDom : domain(1);
+  /*
+    The locales to allocate bags for and load balance across.
+  */
   var targetLocales : [targetLocDom] locale;
   pragma "no doc"
   var pid : int = -1;
@@ -1217,24 +1221,5 @@ class Bag {
     }
 
     halt("DEADCODE");
-  }
-}
-
-proc main() {
-  var found : [1..1000] bool;
-  var bag = new DistributedBag(int);
-  forall i in 1 .. 1000 {
-    bag.add(i);
-  }
-
-  bag.balance();
-  forall elt in bag {
-    found[elt] = true;
-  }
-
-  for f in found {
-    if f == false {
-      halt("Did not find an index...");
-    }
   }
 }
