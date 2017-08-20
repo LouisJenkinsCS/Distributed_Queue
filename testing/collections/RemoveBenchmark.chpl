@@ -50,7 +50,7 @@ proc main() {
       }
   );
 
-  // DistributedBag (Imbalanced) - Benchmark
+  // DistributedBag - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
         var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
@@ -61,35 +61,13 @@ proc main() {
       },
       deinitFn = deinitFn,
       targetLocales=targetLocales,
-      benchName = "DistributedBag - Imbalanced",
+      benchName = "DistributedBag",
       plotter = plotter,
       benchTime = 1,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
         var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
-        return c;
-      }
-  );
-
-  // DistributedBag (Balanced) - Benchmark
-  runBenchmarkMultiplePlotted(
-      benchFn = lambda(bd : BenchmarkData) {
-        var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
-        while true {
-          var (hasElem, elem) = c.remove();
-          if !hasElem then break;
-        }
-      },
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "DistributedBag - Balanced",
-      plotter = plotter,
-      benchTime = 1,
-      initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
-        coforall loc in bmd.targetLocales do on loc {
-          forall i in 1 .. bmd.totalOps / bmd.targetLocales.size do c.add(i);
-        }
+        c.balance();
         return c;
       }
   );

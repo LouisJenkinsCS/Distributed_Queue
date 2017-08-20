@@ -317,27 +317,36 @@ class DistributedDeque : Collection {
   var targetLocales;
 
   // Privatization id
-  private var pid : int;
+  pragma "no doc"
+  var pid : int;
 
   // Keeps track of which slot we are on...
-  private var globalHead : atomic int;
-  private var globalTail : atomic int;
-  private var queueSize : atomic int;
+  pragma "no doc"
+  var globalHead : atomic int;
+  pragma "no doc"
+  var globalTail : atomic int;
+  pragma "no doc"
+  var queueSize : atomic int;
 
   // Freezing the queue consists of two phases: The 'marked' phase, where the queue
   // is marked for a state change, which prevents any new tasks for a particular state
   // from entering, followed by a 'waiting' phase where we wait any concurrent tasks
   // to find across all nodes (in case they did not notice the state change). This
   // applies to state changes to frozen and unfrozen state.
-  private var concurrentTasks : atomic int;
-  private var frozenState : atomic int;
+  pragma "no doc"
+  var concurrentTasks : atomic int;
+  pragma "no doc"
+  var frozenState : atomic int;
 
   // We maintain an array of slots, wherein each slot is a pointer into a node's
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
   // to reduce the amount of contention.
-  private var nSlots = here.maxTaskPar * targetLocales.size;
-  private var slotSpace = {0..#nSlots};
-  private var slots : [slotSpace] LocalDeque(eltType);
+  pragma "no doc"
+  var nSlots = here.maxTaskPar * targetLocales.size;
+  pragma "no doc"
+  var slotSpace = {0..#nSlots};
+  pragma "no doc"
+  var slots : [slotSpace] LocalDeque(eltType);
 
   proc DistributedDeque(type eltType, cap=-1, targetLocales=Locales) {
     nSlots = here.maxTaskPar * targetLocales.size;

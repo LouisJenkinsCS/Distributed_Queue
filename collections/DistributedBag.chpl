@@ -444,7 +444,6 @@ class DistributedBag : Collection {
           var tmpBuffer = __primitive("+", buffer, bufferOffset);
           segment.transferElements(tmpBuffer, take, buffer.locale.id);
           bufferOffset += take;
-          writeln(segmentIdx, ": Took ", take, " elements from locale ", loc.id);
         }
       }
 
@@ -456,10 +455,7 @@ class DistributedBag : Collection {
         ref segment = getPrivatizedThis.bag.segments[segmentIdx];
         var nElems = segment.nElems.read() : int;
         if average > nElems {
-          writeln(segmentIdx, ": average(", average, ") > nElems(", nElems, ")");
           var give = average - nElems;
-          writeln("give(", give, ") = average(", average, ") - nElems(", nElems, ");");
-
           var arr : [1..give] eltType;
           on bufferOffset {
             var tmpBuffer = buffer;
@@ -918,8 +914,11 @@ class Bag {
   /*
     If a task makes 2 complete passes (1 best-case, 1 average-case) and has not
     found enough items, then it may attempt to balance the load distribution.
+    Furthermore, if a task is waiting on a load balance, it may piggyback on the
+    result.
   */
   var loadBalanceInProgress : atomic bool;
+  var loadBalanceResult : atomic bool;
 
 
 
@@ -1102,6 +1101,11 @@ class Bag {
                     segment.releaseStatus();
 
                     loadBalanceInProgress.waitFor(false);
+                    var notEmpty = loadBalanceResult.read();
+                    if !notEmpty {
+                      return (false, _defaultOf(eltType));
+                    }
+
                     // Reset our phase and scan for more elements...
                     phase = REMOVE_BEST_CASE;
                     break;
@@ -1183,6 +1187,7 @@ class Bag {
                     recvSegment.releaseStatus();
                   }
 
+                  loadBalanceResult.write(!isEmpty.read());
                   loadBalanceInProgress.write(false);
 
                   // At this point, if no work has been found, we will return empty...

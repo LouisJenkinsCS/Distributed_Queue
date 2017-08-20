@@ -34,37 +34,26 @@ sections.
 
 ### Performance
 
-TODO: Update with new results
-
 We compare our data structures to a naive synchronized list implementation
-as that is all that is available. In all cases, the data structures scale and
-outperform the naive implementation by far.
+as that is all that is available in the Chapel standard library.
+In all cases, the data structures scale and outperform the naive implementation.
 
 #### Insert
 
-Implementation | Performance over Naive
+Implementation | Performance over Naive (at 64 nodes)
 -------------- | :-----------:
-SynchronizedList | 100%
-DistributedBoundedQueue | 6233.1%
-DistributedQueue | 3638%
-DistributedBag | 40323%
+SynchronizedList | 1x
+DistributedDeque | 63x
+DistributedBag | 403x
 
 ![](Results/Collections_Add.png)
 
 #### Remove
 
-In this benchmark, we test raw removal time. In the case of DistributedBag, we have
-two variants; one which tests remove when it is already load balanced (as in we
-fill the bag ahead of time in a fairly distributed manner), given a `(Balanced)` suffix,
-and one which is not all too uncommon, where we add all elements to a single node
-causing an artificial imbalance, which tests how the bag performs in the worst case.
-
-Implementation | Performance over Naive
+Implementation | Performance over Naive (at 64 nodes)
 -------------- | :-----------:
-SynchronizedList | 100%
-DistributedBoundedQueue | 9345.4%
-DistributedQueue | 6225.1%
-DistributedBag (Imbalanced) | 18853%
-DistributedBag (Balanced) | 50330%
+SynchronizedList | 1x
+DistributedDeque | 123x
+DistributedBag | 651x
 
 ![](Results/Collections_Remove.png)

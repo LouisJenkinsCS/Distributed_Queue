@@ -18,20 +18,7 @@ proc main() {
   var deinitFn = lambda(obj : object) {
     delete obj;
   };
-
-  // DistributedBoundedQueue - Benchmark
-  runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
-      benchTime = 1,
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "DistributedDeque - Bounded",
-      plotter = plotter,
-      initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedDeque(int, cap=bmd.totalOps, targetLocales=bmd.targetLocales);
-      }
-  );
-
+  
   // DistributedQueue - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = benchFn,
