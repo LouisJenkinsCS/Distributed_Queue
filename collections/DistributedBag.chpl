@@ -77,37 +77,37 @@ private param REMOVE_WORST_CASE = 4;
   there are larger numbers of elements. The better the locality, the better raw
   performance and easier it is to redistribute work.
 */
-config param INITIAL_BLOCK_SIZE = 1024;
+config param distributedBagInitialBlockSize = 1024;
 /*
   To prevent stealing too many elements (horizontally) from another node's segment
   (hence creating an artifical load imbalance), if the other node's segment has
-  less than a certain threshold (see `WORK_STEALING_MAX_MEMORY_MB`) but above
-  another threshold (see `WORK_STEALING_MINIMUM`), we steal a percentage of their
+  less than a certain threshold (see `distributedBagWorkStealingMemCap`) but above
+  another threshold (see `distributedBagWorkStealingMinElems`), we steal a percentage of their
   elements, leaving them with majority of their elements. This way, the amount the
   other segment loses is proportional to how much it owns, ensuring a balance.
 */
-config param WORK_STEALING_RATIO = 0.25;
+config param distributedBagWorkStealingRatio = 0.25;
 /*
   The maximum amount of work to steal from a horizontal node's segment. This
   should be set to a value, in megabytes, that determines the maximum amount of
   data that should be sent in bulk at once. The maximum number of elements is
-  determined by: (WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024) / sizeof(eltType).
+  determined by: (distributedBagWorkStealingMemCap * 1024 * 1024) / sizeof(eltType).
   For example, if we are storing 8-byte integers and have a 1MB limit, we would
   have a maximum of 125,000 elements stolen at once.
 */
-config param WORK_STEALING_MAX_MEMORY_MB : real = 1.0;
+config param distributedBagWorkStealingMemCap : real = 1.0;
 /*
   The minimum number of elements a horizontal segment must have to become eligible
   to be stolen from. This may be useful if some segments produce less elements than
   others and should not be stolen from.
 */
-config param WORK_STEALING_MINIMUM = 1;
+config param distributedBagWorkStealingMinElems = 1;
 
 /*
   A parallel-safe distributed multiset implementation that scales in terms of
   nodes, processors per node (PPN), and workload; The more PPN, the more segments
   we allocate to increase raw parallelism, and the larger the workload the better
-  locality (see `INITIAL_BLOCK_SIZE`). This data structure is unordered and employs
+  locality (see `distributedBagInitialBlockSize`). This data structure is unordered and employs
   its own work-stealing algorithm, and provides a means to obtain a privatized instance of
   the data structure for maximized performance.
 */
@@ -194,7 +194,7 @@ class DistributedBag : Collection {
     and may miss elements or even count duplicates resulting from any concurrent
     insertion or removal operations.
   */
-  proc size() : int {
+  proc getSize() : int {
     var sz : atomic int;
     forall loc in targetLocales do on loc {
       var instance = getPrivatizedThis;
@@ -306,7 +306,7 @@ class DistributedBag : Collection {
         var nElems = segment.nElems.read() : int;
         if nElems > average {
           var take = nElems - average;
-          var tmpBuffer = __primitive("+", buffer, bufferOffset);
+          var tmpBuffer = buffer + offset;
           segment.transferElements(tmpBuffer, take, buffer.locale.id);
           bufferOffset += take;
         }
@@ -343,7 +343,7 @@ class DistributedBag : Collection {
       if excess > bufferOffset {
         ref segment = localThis.bag.segments[segmentIdx];
         var give = excess - bufferOffset;
-        var tmpBuffer = __primitive("+", buffer, bufferOffset);
+        var tmpBuffer = buffer + bufferOffset;
         segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
       }
 
@@ -623,7 +623,7 @@ record BagSegment {
       var block = tailBlock;
       // Empty? Create a new one of initial size
       if block == nil then {
-        tailBlock = new BagSegmentBlock(eltType, INITIAL_BLOCK_SIZE);
+        tailBlock = new BagSegmentBlock(eltType, distributedBagInitialBlockSize);
         headBlock = tailBlock;
         block = tailBlock;
       }
@@ -706,7 +706,7 @@ record BagSegment {
 
     // Empty? Create a new one of initial size
     if block == nil then {
-      tailBlock = new BagSegmentBlock(eltType, INITIAL_BLOCK_SIZE);
+      tailBlock = new BagSegmentBlock(eltType, distributedBagInitialBlockSize);
       headBlock = tailBlock;
       block = tailBlock;
     }
@@ -825,7 +825,7 @@ class Bag {
       }
     }
 
-    halt("DEADCODE");
+    halt("DistributedBag Internal Error: DEADCODE");
   }
 
   proc remove() : (bool, eltType) {
@@ -972,19 +972,19 @@ class Bag {
 
                           // As we only care that the segment contains data,
                           // we test-and-test-and-set until we gain ownership.
-                          while targetSegment.nElems.read() >= WORK_STEALING_MINIMUM {
+                          while targetSegment.nElems.read() >= distributedBagWorkStealingMinElems {
                             var backoff = 0;
                             if targetSegment.currentStatus == STATUS_UNLOCKED && targetSegment.acquireWithStatus(STATUS_REMOVE) {
                               // Sanity check: ensure segment did not fall under minimum since last check
-                              if  targetSegment.nElems.read() < WORK_STEALING_MINIMUM {
+                              if  targetSegment.nElems.read() < distributedBagWorkStealingMinElems {
                                 targetSegment.releaseStatus();
                                 break;
                               }
 
                               extern proc sizeof(type x): size_t;
                               // We steal at most 1MB worth of data. If the user has less than that, we steal a %, at least 1.
-                              const mb = WORK_STEALING_MAX_MEMORY_MB * 1024 * 1024;
-                              var toSteal = max(WORK_STEALING_MINIMUM, min(mb / sizeof(eltType), targetSegment.nElems.read() * WORK_STEALING_RATIO)) : int;
+                              const mb = distributedBagWorkStealingMemCap * 1024 * 1024;
+                              var toSteal = max(distributedBagWorkStealingMinElems, min(mb / sizeof(eltType), targetSegment.nElems.read() * distributedBagWorkStealingRatio)) : int;
 
                               // Allocate storage...
                               on stolenWork do stolenWork[loc.id] = (toSteal, c_malloc(eltType, toSteal));
@@ -1052,6 +1052,6 @@ class Bag {
       backoff = 0;
     }
 
-    halt("DEADCODE");
+    halt("DistributedBag Internal Error: DEADCODE");
   }
 }

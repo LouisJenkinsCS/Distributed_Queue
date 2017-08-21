@@ -63,7 +63,7 @@ class Collection {
     Check if this data structure is empty.
   */
   inline proc isEmpty() : bool {
-    return size() == 0;
+    return getSize() == 0;
   }
 
   /*
@@ -73,10 +73,14 @@ class Collection {
     return size();
   }
 
+  inline proc size : int {
+    return getSize();
+  }
+
   /*
     Obtain the number of elements contained in this collection.
   */
-  inline proc size() : int {
+  inline proc getSize() : int {
     halt("'proc size() : int' is not supported...");
   }
 

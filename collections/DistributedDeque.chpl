@@ -16,21 +16,9 @@ use Collection;
 */
 
 /*
-  Frozen states... If we are FREEZE_UNFROZEN, we are mutable. If we are FREEZE_FROZEN,
-  we are immutable. If we are FREEZE_MARKED, we are in the middle of a state change.
-*/
-private const FREEZE_UNFROZEN = 0;
-private const FREEZE_MARKED = 1;
-private const FREEZE_FROZEN = 2;
-
-/*
   Size of each unroll block for each local deque node.
 */
-config param DEQUE_BLOCK_SIZE = 8;
-/*
-    Turn off checks for freezing the data structure.
-*/
-config param DEQUE_NO_FREEZE = false;
+config param distributedDequeBlockSize = 8;
 
 // For each node we manage an unroll block. This block needs to also support Deque
 // operations, and as such we maintain our own mini headIdx and tailIdx. Since we can
@@ -38,7 +26,7 @@ config param DEQUE_NO_FREEZE = false;
 pragma "no doc"
 class LocalDequeNode {
   type eltType;
-  var elements : DEQUE_BLOCK_SIZE * eltType;
+  var elements : distributedDequeBlockSize * eltType;
   var headIdx : int = 1;
   var tailIdx : int = 1;
   var size : int;
@@ -46,7 +34,7 @@ class LocalDequeNode {
   var prev : LocalDequeNode(eltType);
 
   inline proc isFull {
-    return size == DEQUE_BLOCK_SIZE;
+    return size == distributedDequeBlockSize;
   }
 
   inline proc isEmpty {
@@ -57,7 +45,7 @@ class LocalDequeNode {
     elements[tailIdx] = elt;
 
     tailIdx += 1;
-    if tailIdx > DEQUE_BLOCK_SIZE {
+    if tailIdx > distributedDequeBlockSize {
       tailIdx = 1;
     }
     size += 1;
@@ -66,7 +54,7 @@ class LocalDequeNode {
   inline proc popBack() : eltType {
     tailIdx -= 1;
     if tailIdx == 0 {
-      tailIdx = DEQUE_BLOCK_SIZE;
+      tailIdx = distributedDequeBlockSize;
     }
 
     size -= 1;
@@ -76,7 +64,7 @@ class LocalDequeNode {
   inline proc pushFront(elt : eltType) {
     headIdx -= 1;
     if headIdx == 0 {
-      headIdx = DEQUE_BLOCK_SIZE;
+      headIdx = distributedDequeBlockSize;
     }
 
     elements[headIdx] = elt;
@@ -86,7 +74,7 @@ class LocalDequeNode {
   inline proc popFront() : eltType {
     var elt = elements[headIdx];
     headIdx += 1;
-    if headIdx > DEQUE_BLOCK_SIZE {
+    if headIdx > distributedDequeBlockSize {
       headIdx = 1;
     }
 
@@ -732,7 +720,7 @@ class DistributedDeque : Collection {
   /*
     Obtains the number of elements held by this queue.
   */
-  proc size() : int {
+  proc getSize() : int {
     return queueSize.read();
   }
 
@@ -770,7 +758,7 @@ class DistributedDeque : Collection {
             }
 
             headIdx += 1;
-            if headIdx > DEQUE_BLOCK_SIZE {
+            if headIdx > distributedDequeBlockSize {
               headIdx = 1;
             }
           }
@@ -810,7 +798,7 @@ class DistributedDeque : Collection {
           yield node.elements[headIdx];
 
           headIdx += 1;
-          if headIdx > DEQUE_BLOCK_SIZE {
+          if headIdx > distributedDequeBlockSize {
             headIdx = 1;
           }
         }
@@ -837,7 +825,7 @@ class DistributedDeque : Collection {
         yield node.elements[headIdx];
 
         headIdx += 1;
-        if headIdx > DEQUE_BLOCK_SIZE {
+        if headIdx > distributedDequeBlockSize {
           headIdx = 1;
         }
       }
@@ -891,7 +879,7 @@ class DistributedDeque : Collection {
       // Update state...
       size -= 1;
       headIdx += 1;
-      if headIdx > DEQUE_BLOCK_SIZE {
+      if headIdx > distributedDequeBlockSize {
         headIdx = 1;
       }
 
@@ -955,7 +943,7 @@ class DistributedDeque : Collection {
       size -= 1;
       tailIdx -= 1;
       if tailIdx == 0 {
-        tailIdx = DEQUE_BLOCK_SIZE;
+        tailIdx = distributedDequeBlockSize;
       }
 
       // Advance...
