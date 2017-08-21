@@ -12,7 +12,7 @@ class Collection {
     Adds an element to this data structure.
   */
   inline proc add(elt : eltType) : bool {
-    halt("'proc add(elts : eltType ... ?nElts) : bool' is not supported...");
+    halt("'proc add(elt : eltType) : bool' is not supported...");
   }
 
   /*
