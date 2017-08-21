@@ -258,6 +258,8 @@ class DistributedBag : Collection {
     often. Dynamic work stealing handles cases where there is a relatively fair
     distribution across majority of nodes, but this should be called when you have
     a severe imbalance, or when you have a smaller number of elements to balance.
+    Furthermore, while this operation is parallel-safe, it should be called in a
+    sequential context.
   */
   proc balance() {
     var localThis = getPrivatizedThis;
@@ -313,10 +315,9 @@ class DistributedBag : Collection {
       // With the excess elements, redistribute it...
       // BUG: Need to use Chapel Arrays due to issues with compiler automatically
       // dereferencing a C_Ptr resulting in a segfault.
-      // BUG: CodeGen seems to cause an issue where 'avg' is compared as a pointer,
-      // since it is incorrectly being promoted as a reference. Furthermore, then
-      // I use the '__primitive("+", ...)' compiler primitive, it results in also
-      // using pointer value; printing it seems to correctly produce its value though.
+      // BUG: Without '--no-denormalization' flag, the compiler will incorrectly
+      // use everything beyond this point by reference and *not* dereference it
+      // beforehand, causing more undefined behavior. For now, I use Chapel Arrays.
       bufferOffset = 0;
       for loc in localThis.targetLocales do on loc {
         var average = avg;
@@ -442,7 +443,7 @@ class DistributedBag : Collection {
 
 /*
   A segment block is an unrolled linked list node that holds a contiguous buffer
-  of memory. Each segment block *should* be a power of two, as we increase the
+  of memory. Each segment block size *should* be a power of two, as we increase the
   size of each subsequent unroll block by twice the size. This is so that stealing
   work is faster in that majority of elements are confined to one area.
 */
@@ -469,12 +470,11 @@ class BagSegmentBlock {
 
   inline proc push(elt : eltType) {
     if elems == nil {
-      writeln("Cap: ", cap, "; elems: ", elems : string);
-      halt("'elems' is nil");
+      halt("DistributedBag Internal Error: 'elems' is nil");
     }
 
     if isFull {
-      halt("SegmentBlock is Full");
+      halt("DistributedBag Internal Error: SegmentBlock is Full");
     }
 
     elems[size] = elt;
@@ -483,11 +483,11 @@ class BagSegmentBlock {
 
   inline proc pop() : eltType {
     if elems == nil {
-      halt("'elems' is nil");
+      halt("DistributedBag Internal Error: 'elems' is nil");
     }
 
     if isEmpty {
-      halt("SegmentBlock is Empty");
+      halt("DistributedBag Internal Error: SegmentBlock is Empty");
     }
 
     size = size - 1;
@@ -497,7 +497,7 @@ class BagSegmentBlock {
 
   proc BagSegmentBlock(type eltType, capacity) {
     if capacity == 0 {
-      halt("Capacity is 0...");
+      halt("DistributedBag Internal Error: Capacity is 0...");
     }
 
     cap = capacity;
@@ -585,7 +585,7 @@ record BagSegment {
     var srcOffset = 0;
     while destOffset < n {
       if headBlock == nil || isEmpty {
-        halt(here, ": Attempted transfer ", n, " elements to ", locId, " but failed... destOffset=", destOffset);
+        halt(here, ": DistributedBag Internal Error: Attempted transfer ", n, " elements to ", locId, " but failed... destOffset=", destOffset);
       }
 
       var len = headBlock.size;
@@ -653,11 +653,11 @@ record BagSegment {
 
     for 1 .. n : int{
       if isEmpty {
-        halt("Attempted to take ", n, " elements when insufficient");
+        halt("DistributedBag Internal Error: Attempted to take ", n, " elements when insufficient");
       }
 
       if headBlock.isEmpty {
-        halt("Iterating over ", n, " elements with headBlock empty but nElems is ", nElems.read());
+        halt("DistributedBag Internal Error: Iterating over ", n, " elements with headBlock empty but nElems is ", nElems.read());
       }
 
       arr[arrIdx] = headBlock.pop();
@@ -683,7 +683,7 @@ record BagSegment {
     }
 
     if headBlock.isEmpty {
-      halt("Iterating over 1 element with headBlock empty but nElems is ", nElems.read());
+      halt("DistributedBag Internal Error: Iterating over 1 element with headBlock empty but nElems is ", nElems.read());
     }
 
     var elem = headBlock.pop();
@@ -1043,7 +1043,7 @@ class Bag {
           }
         }
 
-        otherwise do halt("Invalid phase #", phase);
+        otherwise do halt("DistributedBag Internal Error: Invalid phase #", phase);
       }
 
       // Reset variables...
