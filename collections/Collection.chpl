@@ -19,15 +19,16 @@ class Collection {
     Removes an arbitrary element from this data structure.
 
     **BUG:** Compiler will segfault if the returned value is not captured at callsite.
+    Issue: #6542
 
     **FIX:** Ensure that you always capture the return value...
 
     ::
-    
+
       var capturedRetval = c.remove()
 
     **BUG:** Loop Invariant Code Motion causes undefined behavior if assigned to a
-    variable declared outside of loop
+    variable declared outside of loop. Issue: #7003
 
     **FIX:** Use the `--no-loop-invariant-code-motion` to disable LICM.
     Otherwise, just make sure you always capture the return value inside of a loop
@@ -76,7 +77,8 @@ class Collection {
     Iterate over all elements in the data structure.
 
     **BUG:** Compiler does not currently allow overloading standalone or leader/follower
-    iterators, and as such only serial iterators may be used with the base type.
+    iterators, and as such only serial iterators may be used with the base type. See
+    issue #6998
   */
   iter these() : eltType {
     halt("'iter these() : eltType' is not supported...");

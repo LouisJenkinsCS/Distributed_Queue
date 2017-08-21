@@ -19,7 +19,7 @@ to load distribution that ensures fairness in memory, bandwidth, and computation
 **Disclaimer:** The deque provided, while scalable, rely heavily on network atomics.
 The benchmark results are produced using said network atomic operations.
 
-## MultiSet
+## Bag
 
 With performance that scales both in the number of nodes in a cluster and the
 number of cores per node, we offer a multiset implementation, called a 'Bag',
