@@ -67,6 +67,13 @@ class Collection {
   }
 
   /*
+    Syntactic sugar for `size`.
+  */
+  inline proc length : int {
+    return size();
+  }
+
+  /*
     Obtain the number of elements contained in this collection.
   */
   inline proc size() : int {
@@ -83,42 +90,6 @@ class Collection {
   iter these() : eltType {
     halt("'iter these() : eltType' is not supported...");
     yield _defaultOf(eltType);
-  }
-
-  /*
-    Declares this collection immutable.
-
-    **NOTE:** This method may be removed from the core interface.
-  */
-  inline proc freeze() : bool {
-    halt("'proc freeze() : bool' is not supported...");
-  }
-
-  /*
-    Declares this collection mutable.
-
-    **NOTE:** This method may be removed from the core interface.
-  */
-  inline proc unfreeze() : bool {
-    halt("'proc freeze() : bool' is not supported...");
-  }
-
-  /*
-    Whether this collection supports freezing.
-
-    **NOTE:** This method may be removed from the core interface.
-  */
-  inline proc canFreeze() : bool {
-    return false;
-  }
-
-  /*
-    Determines if this collection is currently frozen.
-
-    **NOTE:** This method may be removed from the core interface.
-  */
-  inline proc isFrozen() : bool {
-    halt("'proc isFrozen() : bool' is not supported...");
   }
 }
 

@@ -49,27 +49,27 @@ use BlockDist;
   Below are segment statuses, which is a way to make visible to outsiders the
   current ongoing operation.
 */
-private const STATUS_UNLOCKED : uint = 0;
-private const STATUS_ADD : uint = 1;
-private const STATUS_REMOVE : uint = 2;
-private const STATUS_LOOKUP : uint = 3;
-private const STATUS_BALANCE : uint = 4;
+private param STATUS_UNLOCKED : uint = 0;
+private param STATUS_ADD : uint = 1;
+private param STATUS_REMOVE : uint = 2;
+private param STATUS_LOOKUP : uint = 3;
+private param STATUS_BALANCE : uint = 4;
 
 /*
   Below are statuses specific to the work stealing algorithm.
 */
-private const WS_INITIALIZED : int = -1;
-private const WS_FINISHED_WITH_NO_WORK : int = 0;
-private const WS_FINISHED_WITH_WORK : int = 1;
+private param WS_INITIALIZED = -1;
+private param WS_FINISHED_WITH_NO_WORK = 0;
+private param WS_FINISHED_WITH_WORK = 1;
 
 /*
   The phases for operations.
 */
-private const ADD_BEST_CASE = 0;
-private const ADD_AVERAGE_CASE = 1;
-private const REMOVE_BEST_CASE = 2;
-private const REMOVE_AVERAGE_CASE = 3;
-private const REMOVE_WORST_CASE = 4;
+private param ADD_BEST_CASE = 0;
+private param ADD_AVERAGE_CASE = 1;
+private param REMOVE_BEST_CASE = 2;
+private param REMOVE_AVERAGE_CASE = 3;
+private param REMOVE_WORST_CASE = 4;
 
 /*
   The initial amount of elements in an unroll block. Each successive unroll block
