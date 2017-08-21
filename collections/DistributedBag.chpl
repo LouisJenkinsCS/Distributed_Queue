@@ -417,7 +417,7 @@ class DistributedBag : Collection {
 
           while block != nil {
             if bufferOffset + block.size > bufferSz {
-              halt("Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
+              halt("DistributedBag Internal Error: Snapshot attempt with bufferSz(", bufferSz, ") with offset bufferOffset(", bufferOffset + block.size, ")");
             }
             __primitive("chpl_comm_array_put", block.elems[0], here.id, buffer[bufferOffset], block.size);
             bufferOffset += block.size;

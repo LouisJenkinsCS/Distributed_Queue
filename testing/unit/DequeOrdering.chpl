@@ -17,13 +17,11 @@ for i in 1 .. nElems {
 assert(deque.size() == nElems);
 assert(deque.contains(nElems / 2));
 
-deque.freeze();
 var expect = 1;
-for elem in deque.FIFO() {
+for elem in deque.these(Ordering.FIFO) {
   assert(elem == expect);
   expect += 1;
 }
-deque.unfreeze();
 
 for i in 1 .. nElems {
   var (hasElem, elem) = deque.dequeue();
@@ -38,6 +36,13 @@ for i in 1 .. nElems {
 }
 assert(deque.size() == nElems);
 assert(deque.contains(nElems / 2));
+
+expect = nElems;
+for elem in deque.these(Ordering.LIFO) {
+  assert(elem == expect);
+  expect -= 1;
+}
+
 for i in 0 .. #nElems {
   var (hasElem, elem) = deque.pop();
   assert(hasElem && elem == nElems - i);

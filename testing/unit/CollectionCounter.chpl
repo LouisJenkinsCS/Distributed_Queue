@@ -24,7 +24,6 @@ var c = (
 for i in 1 .. nElems {
   c.add(i);
 }
-c.freeze();
 
 assert(c.size() == nElems);
 assert(c.contains((nElems / 2) : int));
@@ -38,7 +37,6 @@ assert(actual == expected);
 assert(c.size() == nElems);
 
 // Empty collection. Make sure all tasks start around same time...
-c.unfreeze();
 if isBag then c.balance();
 var concurrentActual : atomic int;
 var barrier = new Barrier(here.maxTaskPar * numLocales);

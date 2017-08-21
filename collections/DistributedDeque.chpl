@@ -8,17 +8,27 @@ use Collection;
   a Stack, and a List respectively. The deque enforces a 'barrier', which is a method
   of checking whether you may proceed with an operation, that is wait-free under
   most cases, lock-free in the worst case, which guarantees scalability. In the
-  barrier, we perform freeze checks (if DEQUE_NO_FREEZE is not enabled), and bounds
-  checking (if a capacity is given). Deque operations are separated into two
-  levels: global and local. At a global level, we use simple fetchAdd and fetchSub
-  counters to denote which local deque we apply our operation to, and at a local level
-  we use an unrolled linked list which further has its own (non-atomic) counter.
+  barrier, we perform bounds checking (if a capacity is given). Deque operations
+  are separated into two levels: global and local. At a global level, we use
+  simple fetchAdd and fetchSub counters to denote which local deque we apply our
+  operation to, and at a local level we use an unrolled linked list which further
+  has its own (non-atomic) counter.
 */
 
 /*
   Size of each unroll block for each local deque node.
 */
 config param distributedDequeBlockSize = 8;
+
+/*
+  The ordering used for serial iteration. NONE, the default, is the most performant
+  and is algorithmically similar to parallel iteration.
+*/
+enum Ordering {
+  NONE,
+  FIFO,
+  LIFO
+}
 
 // For each node we manage an unroll block. This block needs to also support Deque
 // operations, and as such we maintain our own mini headIdx and tailIdx. Since we can
@@ -84,13 +94,16 @@ class LocalDequeNode {
 }
 
 /*
-  For each slot we maintain a deque.
+  For each slot (core) we maintain a deque.
+
+  **TODO:** Need to convert LocalDequeNode to use C_Ptr, double the size of each
+  successor for better locality, and use the snapshot approach so that iteration
+  does not prevent usage of other methods on the same Deque from the same task.
 */
 pragma "no doc"
 class LocalDeque {
   type eltType;
 
-  // Locks are atomic to allow us to remotely contest for the lock.
   var lock$ : sync bool;
 
   var head : LocalDequeNode(eltType);
@@ -151,7 +164,6 @@ class LocalDeque {
     }
   }
 
-  // TODO: Make 'local'
   proc popBack() : eltType {
     var elt : eltType;
     on this {
@@ -325,16 +337,6 @@ class DistributedDeque : Collection {
   pragma "no doc"
   var queueSize : atomic int;
 
-  // Freezing the queue consists of two phases: The 'marked' phase, where the queue
-  // is marked for a state change, which prevents any new tasks for a particular state
-  // from entering, followed by a 'waiting' phase where we wait any concurrent tasks
-  // to find across all nodes (in case they did not notice the state change). This
-  // applies to state changes to frozen and unfrozen state.
-  pragma "no doc"
-  var concurrentTasks : atomic int;
-  pragma "no doc"
-  var frozenState : atomic int;
-
   // We maintain an array of slots, wherein each slot is a pointer into a node's
   // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
   // to reduce the amount of contention.
@@ -391,22 +393,8 @@ class DistributedDeque : Collection {
 
   pragma "no doc"
   inline proc enterRemoveBarrier(localThis) {
-    // Enter freeze barrier...
-    if !DEQUE_NO_FREEZE {
-      local {
-        localThis.concurrentTasks.add(1);
-
-        // Check if the queue is now 'immutable'.
-        if localThis.frozenState.read() > FREEZE_UNFROZEN {
-          localThis.concurrentTasks.sub(1);
-          return false;
-        }
-      }
-    }
-
     // If we have a capacity of 0, then we can't really remove anything anyway.
     if localThis.cap == 0 {
-      if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
       return false;
     }
 
@@ -431,7 +419,6 @@ class DistributedDeque : Collection {
         }
 
         // Fixed, return early...
-        if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
         return false;
       }
       // If we have a cap, then at this point, we have something between [0, cap],
@@ -449,22 +436,8 @@ class DistributedDeque : Collection {
 
   pragma "no doc"
   inline proc enterAddBarrier(localThis) {
-    // Enter freeze barrier...
-    if !DEQUE_NO_FREEZE {
-      local {
-        localThis.concurrentTasks.add(1);
-
-        // Check if the queue is now 'immutable'.
-        if localThis.frozenState.read() > FREEZE_UNFROZEN {
-          localThis.concurrentTasks.sub(1);
-          return false;
-        }
-      }
-    }
-
     // If we have a capacity of 0, then we can't really add anything anyway.
     if localThis.cap == 0 {
-      if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
       return false;
     }
 
@@ -491,7 +464,6 @@ class DistributedDeque : Collection {
           }
 
           // Fixed, return early...
-          if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
           return false;
         }
         // At this point, we either have a capacity and something between [0, cap],
@@ -579,7 +551,6 @@ class DistributedDeque : Collection {
     // fetch-add counter, making this wait-free as well.
     var tail = globalTail.fetchAdd(1) % localThis.nSlots;
     localThis.slots[abs(tail)].pushBack(elt);
-    if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
     return true;
   }
 
@@ -597,7 +568,6 @@ class DistributedDeque : Collection {
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var tail = (globalTail.fetchSub(1) - 1) % localThis.nSlots;
     var elt = localThis.slots[abs(tail)].popBack();
-    if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
   }
 
@@ -615,7 +585,6 @@ class DistributedDeque : Collection {
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var head = (globalHead.fetchSub(1) - 1) % localThis.nSlots;
     localThis.slots[abs(head)].pushFront(elt);
-    if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
     return true;
   }
 
@@ -633,88 +602,7 @@ class DistributedDeque : Collection {
     // We find our slot based on another fetch-add counter, making this wait-free as well.
     var head = globalHead.fetchAdd(1) % localThis.nSlots;
     var elt = localThis.slots[abs(head)].popFront();
-    if !DEQUE_NO_FREEZE then local { localThis.concurrentTasks.sub(1); }
     return (true, elt);
-  }
-
-  proc canFreeze() : bool {
-    return !DEQUE_NO_FREEZE;
-  }
-
-  /*
-    If we are currently frozen. If we are in the middle of a state transition, we
-    wait until it has completed.
-  */
-  proc isFrozen() : bool {
-    if DEQUE_NO_FREEZE then return false;
-    var localThis = getPrivatizedThis;
-    var state = localThis.frozenState.read();
-
-    // Current transitioning state, wait it out...
-    while state == FREEZE_MARKED {
-      chpl_task_yield();
-      state = localThis.frozenState.read();
-    }
-
-    return state == FREEZE_FROZEN;
-  }
-
-  /*
-    Freeze our state, becoming immutable; we wait for any ongoing concurrent
-    operations to allow them to finish.
-  */
-  proc freeze() : bool {
-    if DEQUE_NO_FREEZE then return false;
-    var localThis = getPrivatizedThis;
-
-    // Check if already frozen
-    if localThis.frozenState.read() == FREEZE_FROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_MARKED);
-      localThis.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as frozen...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_FROZEN);
-    }
-
-    return true;
-  }
-
-  /*
-    Unfreezes our state, allowing mutating operations; we wait on any ongoing
-    concurrent operations to allow them to finish.
-  */
-  proc unfreeze() : bool {
-    if DEQUE_NO_FREEZE then return false;
-    var localThis = getPrivatizedThis;
-
-    // Check if already unfrozen
-    if localThis.frozenState.read() == FREEZE_UNFROZEN {
-      return true;
-    }
-
-    // Mark as transient state...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_MARKED);
-      localThis.concurrentTasks.waitFor(0);
-    }
-
-    // Mark as unfrozen...
-    coforall loc in targetLocales do on loc {
-      var localThis = getPrivatizedThis;
-      localThis.frozenState.write(FREEZE_UNFROZEN);
-    }
-
-    return true;
   }
 
   /*
@@ -725,71 +613,31 @@ class DistributedDeque : Collection {
   }
 
   /*
-    Performs a lookup for the element in the data structure in parallel if it is
-    frozen, and sequentially otherwise.
+    Performs a lookup for the element in the data structure.
   */
   proc contains(elt : eltType) : bool {
-    // Frozen lookups can be done concurrently
-    if isFrozen() {
-      var containsElem : atomic bool;
-      forall elem in this {
-        if elem == elt {
-          containsElem.write(true);
-        }
-      }
-      return containsElem.read();
-    }
-
-    // Non-frozen lookups require us to obtain the lock to ensure mutual exclusion
-    var localThis = getPrivatizedThis;
-    var foundItem : atomic bool;
-    for slot in localThis.slots {
-      on slot {
-        const targetElt = elt;
-        slot.lock$ = true;
-
-        var node = slot.head;
-        while node != nil {
-          var headIdx = node.headIdx;
-          for 1 .. node.size {
-            if node.elements[headIdx] == targetElt {
-              foundItem.write(true);
-              break;
-            }
-
-            headIdx += 1;
-            if headIdx > distributedDequeBlockSize {
-              headIdx = 1;
-            }
-          }
-
-          if foundItem.read() {
-            break;
-          }
-
-          node = node.next;
-        }
-
-        // Release...
-        slot.lock$;
-      }
-
-      if foundItem.read() {
-        return true;
+    var containsElem : atomic bool;
+    forall elem in this {
+      if elem == elt {
+        containsElem.write(true);
       }
     }
-
-    return false;
+    return containsElem.read();
   }
 
   /*
-    Iterate over all elements in the deque. This iterator does not yield in any
-    particular order (see `FIFO` or `LIFO` for specific ordering).
+    Iterate over all elements in the deque in the order specified.
+
+    **Warning:** Calling other methods while inside of an iterator is not safe as
+    it will likely lead to deadlock.
+
+    **FIXME:** Likely can be worked around by either using snapshot iteration approach
+    or by making the lock reentrant and forcing all iterators to acquire all locks in
+    some global locking order.
   */
-  iter these() : eltType {
-    var frozen = isFrozen();
+  iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.NONE {
     for slot in getPrivatizedThis.slots {
-      if !frozen then slot.lock$ = true;
+      slot.lock$ = true;
       var node = slot.head;
 
       while node != nil {
@@ -805,45 +653,11 @@ class DistributedDeque : Collection {
         node = node.next;
       }
 
-      if !frozen then slot.lock$;
+      slot.lock$;
     }
   }
 
-  iter these(param tag : iterKind) where tag == iterKind.leader {
-    coforall slot in getPrivatizedThis.slots do on slot do yield slot;
-  }
-
-  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
-    var frozen = isFrozen();
-
-    if !frozen then followThis.lock$ = true;
-    var node = followThis.head;
-
-    while node != nil {
-      var headIdx = node.headIdx;
-      for 1 .. node.size {
-        yield node.elements[headIdx];
-
-        headIdx += 1;
-        if headIdx > distributedDequeBlockSize {
-          headIdx = 1;
-        }
-      }
-      node = node.next;
-    }
-
-    if !frozen then followThis.lock$;
-  }
-
-  /*
-    Iterates over the deque in First-In-First-Out order, from front to back. The
-    deque must be frozen or it will result in a halt. This operation is sequential.
-  */
-  iter FIFO() : eltType {
-    if !isFrozen() {
-      halt("Ordered iteration requires the queue to be frozen.");
-    }
-
+  iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.FIFO {
     var localThis = getPrivatizedThis;
 
     // Fill our slots to visit in FIFO order.
@@ -855,6 +669,9 @@ class DistributedDeque : Collection {
     if size == 0 {
       return;
     }
+
+    // Acquire in locking order...
+    for slot in slots do slot.lock$ = true;
 
     // We iterate directly over the heads of each slot, so we capture them in advance.
     var nodes : [{0..#nSlots}] (int, int, LocalDequeNode(eltType));
@@ -896,17 +713,12 @@ class DistributedDeque : Collection {
         nodes[idx] = (size, headIdx, node);
       }
     }
+
+    // Release in locking order...
+    for slot in slots do on slot slot.lock$;
   }
 
-  /*
-    Iterates over the deque in Last-In-First-Out order, from back to front. The
-    deque must be frozen or it will result in a halt. This operation is sequential.
-  */
-  iter LIFO() : eltType {
-    if !isFrozen() {
-      halt("Ordered iteration requires the queue to be frozen.");
-    }
-
+  iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.LIFO {
     var localThis = getPrivatizedThis;
 
     // Fill our slots to visit in FIFO order.
@@ -918,6 +730,9 @@ class DistributedDeque : Collection {
     if size == 0 {
       return;
     }
+
+    // Acquire in locking order...
+    for slot in slots do slot.lock$ = true;
 
     // We iterate directly over the heads of each slot, so we capture them in advance.
     var nodes : [{0..#nSlots}] (int, int, LocalDequeNode(eltType));
@@ -959,6 +774,33 @@ class DistributedDeque : Collection {
         nodes[idx] = (size, tailIdx, node);
       }
     }
+
+    // Release in locking order...
+    for slot in slots do on slot slot.lock$;
+  }
+
+  iter these(param tag : iterKind) where tag == iterKind.leader {
+    coforall slot in getPrivatizedThis.slots do on slot do yield slot;
+  }
+
+  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+    followThis.lock$ = true;
+    var node = followThis.head;
+
+    while node != nil {
+      var headIdx = node.headIdx;
+      for 1 .. node.size {
+        yield node.elements[headIdx];
+
+        headIdx += 1;
+        if headIdx > distributedDequeBlockSize {
+          headIdx = 1;
+        }
+      }
+      node = node.next;
+    }
+
+    followThis.lock$;
   }
 
   proc ~DistributedDeque() {

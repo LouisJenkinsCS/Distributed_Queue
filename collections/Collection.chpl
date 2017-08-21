@@ -90,6 +90,9 @@ class Collection {
     **BUG:** Compiler does not currently allow overloading standalone or leader/follower
     iterators, and as such only serial iterators may be used with the base type. See
     issue #6998
+
+    **BUG:** Resources are not properly cleaned up when the user breaks or returns
+    from a serial iterator, and so this *must* be avoided at all cost.
   */
   iter these() : eltType {
     halt("'iter these() : eltType' is not supported...");
