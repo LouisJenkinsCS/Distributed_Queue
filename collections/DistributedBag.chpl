@@ -77,7 +77,7 @@ private param REMOVE_WORST_CASE = 4;
   there are larger numbers of elements. The better the locality, the better raw
   performance and easier it is to redistribute work.
 */
-config param distributedBagInitialBlockSize = 1024;
+config const distributedBagInitialBlockSize = 1024;
 /*
   To prevent stealing too many elements (horizontally) from another node's segment
   (hence creating an artifical load imbalance), if the other node's segment has
@@ -86,7 +86,7 @@ config param distributedBagInitialBlockSize = 1024;
   elements, leaving them with majority of their elements. This way, the amount the
   other segment loses is proportional to how much it owns, ensuring a balance.
 */
-config param distributedBagWorkStealingRatio = 0.25;
+config const distributedBagWorkStealingRatio = 0.25;
 /*
   The maximum amount of work to steal from a horizontal node's segment. This
   should be set to a value, in megabytes, that determines the maximum amount of
@@ -95,13 +95,13 @@ config param distributedBagWorkStealingRatio = 0.25;
   For example, if we are storing 8-byte integers and have a 1MB limit, we would
   have a maximum of 125,000 elements stolen at once.
 */
-config param distributedBagWorkStealingMemCap : real = 1.0;
+config const distributedBagWorkStealingMemCap : real = 1.0;
 /*
   The minimum number of elements a horizontal segment must have to become eligible
   to be stolen from. This may be useful if some segments produce less elements than
   others and should not be stolen from.
 */
-config param distributedBagWorkStealingMinElems = 1;
+config const distributedBagWorkStealingMinElems = 1;
 
 /*
   A parallel-safe distributed multiset implementation that scales in terms of
@@ -153,10 +153,6 @@ class DistributedBag : Collection {
 
   pragma "no doc"
   inline proc getPrivatizedThis {
-    if this.locale == here {
-      return this;
-    }
-
     return chpl_getPrivatizedCopy(this.type, pid);
   }
 
@@ -166,6 +162,8 @@ class DistributedBag : Collection {
     communications generated from accessing instance fields. Using another node's
     instance will significantly penalize performance by bounding overall throughput
     on the communication between the two nodes.
+
+    TODO: Remove, find way to use record-wrapper privatization
   */
   proc getPrivatizedInstance() {
     return getPrivatizedThis;
@@ -196,7 +194,7 @@ class DistributedBag : Collection {
   */
   proc getSize() : int {
     var sz : atomic int;
-    forall loc in targetLocales do on loc {
+    coforall loc in targetLocales do on loc {
       var instance = getPrivatizedThis;
       forall segmentIdx in 0..#here.maxTaskPar {
         sz.add(instance.bag.segments[segmentIdx].nElems.read() : int);
@@ -305,9 +303,9 @@ class DistributedBag : Collection {
         ref segment = getPrivatizedThis.bag.segments[segmentIdx];
         var nElems = segment.nElems.read() : int;
         if nElems > average {
-          var take = nElems - average;
+          var nTransfer = nElems - average;
           var tmpBuffer = buffer + bufferOffset;
-          segment.transferElements(tmpBuffer, take, buffer.locale.id);
+          segment.transferElements(tmpBuffer, nTransfer, buffer.locale.id);
           bufferOffset += take;
         }
       }
@@ -342,9 +340,9 @@ class DistributedBag : Collection {
       // Lastly, if there are items left over, just add them to our locale's segment.
       if excess > bufferOffset {
         ref segment = localThis.bag.segments[segmentIdx];
-        var give = excess - bufferOffset;
+        var nLeftOvers = excess - bufferOffset;
         var tmpBuffer = buffer + bufferOffset;
-        segment.addElementsPtr(tmpBuffer, give, buffer.locale.id);
+        segment.addElementsPtr(tmpBuffer, nLeftOvers, buffer.locale.id);
       }
 
       c_free(buffer);

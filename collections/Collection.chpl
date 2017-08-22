@@ -11,7 +11,7 @@ class Collection {
   /*
     Adds an element to this data structure.
   */
-  inline proc add(elt : eltType) : bool {
+  proc add(elt : eltType) : bool {
     halt("'proc add(elt : eltType) : bool' is not supported...");
   }
 
@@ -41,49 +41,49 @@ class Collection {
       }
 
   */
-  inline proc remove() : (bool, eltType) {
+  proc remove() : (bool, eltType) {
     halt("'proc remove() : (bool, eltType)' is not supported...");
   }
 
   /*
     Determine whether an element exists in this collection.
   */
-  inline proc contains(elt : eltType) : bool {
+  proc contains(elt : eltType) : bool {
     halt("'proc contains(elt : eltType) : bool' is not supported...");
   }
 
   /*
     Clears all elements in this collection.
   */
-  inline proc clear() {
+  proc clear() {
     while !remove()[1] do ;
   }
 
   /*
     Check if this data structure is empty.
   */
-  inline proc isEmpty() : bool {
+  proc isEmpty() : bool {
     return getSize() == 0;
   }
 
   /*
     Syntactic sugar for `getSize`.
   */
-  inline proc length : int {
+  proc length : int {
     return size();
   }
 
   /*
     Syntactic sugar for `getSize`.
   */
-  inline proc size : int {
+  proc size : int {
     return getSize();
   }
 
   /*
     Obtain the number of elements contained in this collection.
   */
-  inline proc getSize() : int {
+  proc getSize() : int {
     halt("'proc size() : int' is not supported...");
   }
 
@@ -111,6 +111,6 @@ class Collection {
   As such, this cannot be used where `ref` intents cannot be used, such as ``forall``
   and ``coforall`` loops.
 */
-proc +=(ref c : Collection(?eltType), elt : eltType) {
+inline proc +=(ref c : Collection(?eltType), elt : eltType) {
   c.add(elt);
 }
