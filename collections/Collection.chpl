@@ -95,7 +95,7 @@ class Collection {
     issue #6998
 
     **BUG:** Resources are not properly cleaned up when the user breaks or returns
-    from a serial iterator, and so this *must* be avoided at all cost.
+    from a serial iterator, and so this *must* be avoided at all cost. See issue #6912
   */
   iter these() : eltType {
     halt("'iter these() : eltType' is not supported...");

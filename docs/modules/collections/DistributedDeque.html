@@ -138,15 +138,16 @@
 </pre></div>
 </div>
 <dl class="data">
-<dt id="DistributedDeque.DEQUE_BLOCK_SIZE">
-<em class="property">config param </em><code class="descname">DEQUE_BLOCK_SIZE</code> = 8<a class="headerlink" href="#DistributedDeque.DEQUE_BLOCK_SIZE" title="Permalink to this definition">¶</a></dt>
+<dt id="DistributedDeque.distributedDequeBlockSize">
+<em class="property">config param </em><code class="descname">distributedDequeBlockSize</code> = 8<a class="headerlink" href="#DistributedDeque.distributedDequeBlockSize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Size of each unroll block for each local deque node.</p>
 </dd></dl>
 
-<dl class="data">
-<dt id="DistributedDeque.DEQUE_NO_FREEZE">
-<em class="property">config param </em><code class="descname">DEQUE_NO_FREEZE</code> = false<a class="headerlink" href="#DistributedDeque.DEQUE_NO_FREEZE" title="Permalink to this definition">¶</a></dt>
-<dd><p>Turn off checks for freezing the data structure.</p>
+<dl class="enum">
+<dt id="DistributedDeque.Ordering">
+<em class="property">enum </em><code class="descname">Ordering</code> { NONE, FIFO, LIFO }<a class="headerlink" href="#DistributedDeque.Ordering" title="Permalink to this definition">¶</a></dt>
+<dd><p>The ordering used for serial iteration. NONE, the default, is the most performant
+and is algorithmically similar to parallel iteration.</p>
 </dd></dl>
 
 <dl class="class">
@@ -234,74 +235,47 @@ considered unbounded.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="DistributedDeque.DistributedDeque.canFreeze">
-<em class="property">proc </em><code class="descname">canFreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.canFreeze" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.isFrozen">
-<em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.isFrozen" title="Permalink to this definition">¶</a></dt>
-<dd><p>If we are currently frozen. If we are in the middle of a state transition, we
-wait until it has completed.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.freeze">
-<em class="property">proc </em><code class="descname">freeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.freeze" title="Permalink to this definition">¶</a></dt>
-<dd><p>Freeze our state, becoming immutable; we wait for any ongoing concurrent
-operations to allow them to finish.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.unfreeze">
-<em class="property">proc </em><code class="descname">unfreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.unfreeze" title="Permalink to this definition">¶</a></dt>
-<dd><p>Unfreezes our state, allowing mutating operations; we wait on any ongoing
-concurrent operations to allow them to finish.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.size">
-<em class="property">proc </em><code class="descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.size" title="Permalink to this definition">¶</a></dt>
+<dt id="DistributedDeque.DistributedDeque.getSize">
+<em class="property">proc </em><code class="descname">getSize</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.getSize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Obtains the number of elements held by this queue.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="DistributedDeque.DistributedDeque.contains">
 <em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.contains" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs a lookup for the element in the data structure in parallel if it is
-frozen, and sequentially otherwise.</p>
+<dd><p>Performs a lookup for the element in the data structure.</p>
 </dd></dl>
 
 <dl class="itermethod">
 <dt id="DistributedDeque.DistributedDeque.these">
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.these" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterate over all elements in the deque. This iterator does not yield in any
-particular order (see <cite>FIFO</cite> or <cite>LIFO</cite> for specific ordering).</p>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.these" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate over all elements in the deque in the order specified.</p>
+<p><strong>Warning:</strong> Calling other methods while inside of an iterator is not safe as
+it will likely lead to deadlock.</p>
+<p><strong>FIXME:</strong> Likely can be worked around by either using snapshot iteration approach
+or by making the lock reentrant and forcing all iterators to acquire all locks in
+some global locking order.</p>
 </dd></dl>
 
 <dl class="itermethod">
 <dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType</dt>
 <dd></dd></dl>
 
 <dl class="itermethod">
 <dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType</dt>
 <dd></dd></dl>
 
 <dl class="itermethod">
-<dt id="DistributedDeque.DistributedDeque.FIFO">
-<em class="property">iter </em><code class="descname">FIFO</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.FIFO" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterates over the deque in First-In-First-Out order, from front to back. The
-deque must be frozen or it will result in a halt. This operation is sequential.</p>
-</dd></dl>
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em>, <em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
 
 <dl class="itermethod">
-<dt id="DistributedDeque.DistributedDeque.LIFO">
-<em class="property">iter </em><code class="descname">LIFO</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.LIFO" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterates over the deque in Last-In-First-Out order, from back to front. The
-deque must be frozen or it will result in a halt. This operation is sequential.</p>
-</dd></dl>
+<dt>
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em>, <em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
 
 <dl class="method">
 <dt id="DistributedDeque.DistributedDeque.deinit">

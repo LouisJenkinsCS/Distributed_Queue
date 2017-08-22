@@ -159,13 +159,14 @@ for insert, lookup, remove, and iteration operations.</p>
 <dt id="Collection.Collection.remove">
 <em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#Collection.Collection.remove" title="Permalink to this definition">¶</a></dt>
 <dd><p>Removes an arbitrary element from this data structure.</p>
-<p><strong>BUG:</strong> Compiler will segfault if the returned value is not captured at callsite.</p>
+<p><strong>BUG:</strong> Compiler will segfault if the returned value is not captured at callsite.
+Issue: #6542</p>
 <p><strong>FIX:</strong> Ensure that you always capture the return value...</p>
 <div class="highlight-python"><div class="highlight"><pre><span></span>var capturedRetval = c.remove()
 </pre></div>
 </div>
 <p><strong>BUG:</strong> Loop Invariant Code Motion causes undefined behavior if assigned to a
-variable declared outside of loop</p>
+variable declared outside of loop. Issue: #7003</p>
 <p><strong>FIX:</strong> Use the <cite>&#8211;no-loop-invariant-code-motion</cite> to disable LICM.
 Otherwise, just make sure you always capture the return value inside of a loop
 in a variable not declared outside of loop...</p>
@@ -195,8 +196,20 @@ in a variable not declared outside of loop...</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="Collection.Collection.length">
+<em class="property">proc </em><code class="descname">length</code>: int<a class="headerlink" href="#Collection.Collection.length" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>getSize</cite>.</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="Collection.Collection.size">
-<em class="property">proc </em><code class="descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.Collection.size" title="Permalink to this definition">¶</a></dt>
+<em class="property">proc </em><code class="descname">size</code>: int<a class="headerlink" href="#Collection.Collection.size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syntactic sugar for <cite>getSize</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="Collection.Collection.getSize">
+<em class="property">proc </em><code class="descname">getSize</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.Collection.getSize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Obtain the number of elements contained in this collection.</p>
 </dd></dl>
 
@@ -205,35 +218,10 @@ in a variable not declared outside of loop...</p>
 <em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#Collection.Collection.these" title="Permalink to this definition">¶</a></dt>
 <dd><p>Iterate over all elements in the data structure.</p>
 <p><strong>BUG:</strong> Compiler does not currently allow overloading standalone or leader/follower
-iterators, and as such only serial iterators may be used with the base type.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="Collection.Collection.freeze">
-<em class="property">proc </em><code class="descname">freeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.freeze" title="Permalink to this definition">¶</a></dt>
-<dd><p>Declares this collection immutable.</p>
-<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="Collection.Collection.unfreeze">
-<em class="property">proc </em><code class="descname">unfreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.unfreeze" title="Permalink to this definition">¶</a></dt>
-<dd><p>Declares this collection mutable.</p>
-<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="Collection.Collection.canFreeze">
-<em class="property">proc </em><code class="descname">canFreeze</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.canFreeze" title="Permalink to this definition">¶</a></dt>
-<dd><p>Whether this collection supports freezing.</p>
-<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="Collection.Collection.isFrozen">
-<em class="property">proc </em><code class="descname">isFrozen</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.isFrozen" title="Permalink to this definition">¶</a></dt>
-<dd><p>Determines if this collection is currently frozen.</p>
-<p><strong>NOTE:</strong> This method may be removed from the core interface.</p>
+iterators, and as such only serial iterators may be used with the base type. See
+issue #6998</p>
+<p><strong>BUG:</strong> Resources are not properly cleaned up when the user breaks or returns
+from a serial iterator, and so this <em>must</em> be avoided at all cost. See issue #6912</p>
 </dd></dl>
 
 </dd></dl>

@@ -10,15 +10,17 @@ DistributedDeque
 
    use DistributedDeque;
 
-.. data:: config param DEQUE_BLOCK_SIZE = 8
+.. data:: config param distributedDequeBlockSize = 8
 
    
    Size of each unroll block for each local deque node.
 
-.. data:: config param DEQUE_NO_FREEZE = false
+.. enum:: enum Ordering { NONE, FIFO, LIFO }
 
    
-   Turn off checks for freezing the data structure.
+   The ordering used for serial iteration. NONE, the default, is the most performant
+   and is algorithmically similar to parallel iteration.
+
 
 .. class:: DistributedDeque : Collection
 
@@ -103,30 +105,7 @@ DistributedDeque
       Removes the element at the head.
       
 
-   .. method:: proc canFreeze(): bool
-
-   .. method:: proc isFrozen(): bool
-
-      
-      If we are currently frozen. If we are in the middle of a state transition, we
-      wait until it has completed.
-      
-
-   .. method:: proc freeze(): bool
-
-      
-      Freeze our state, becoming immutable; we wait for any ongoing concurrent
-      operations to allow them to finish.
-      
-
-   .. method:: proc unfreeze(): bool
-
-      
-      Unfreezes our state, allowing mutating operations; we wait on any ongoing
-      concurrent operations to allow them to finish.
-      
-
-   .. method:: proc size(): int
+   .. method:: proc getSize(): int
 
       
       Obtains the number of elements held by this queue.
@@ -135,34 +114,29 @@ DistributedDeque
    .. method:: proc contains(elt: eltType): bool
 
       
-      Performs a lookup for the element in the data structure in parallel if it is
-      frozen, and sequentially otherwise.
+      Performs a lookup for the element in the data structure.
       
 
-   .. itermethod:: iter these(): eltType
+   .. itermethod:: iter these(param order: Ordering = Ordering.NONE): eltType
 
       
-      Iterate over all elements in the deque. This iterator does not yield in any
-      particular order (see `FIFO` or `LIFO` for specific ordering).
+      Iterate over all elements in the deque in the order specified.
+      
+      **Warning:** Calling other methods while inside of an iterator is not safe as
+      it will likely lead to deadlock.
+      
+      **FIXME:** Likely can be worked around by either using snapshot iteration approach
+      or by making the lock reentrant and forcing all iterators to acquire all locks in
+      some global locking order.
       
 
-   .. itermethod:: iter these(param tag: iterKind)
+   .. itermethod:: iter these(param order: Ordering = Ordering.NONE): eltType
 
-   .. itermethod:: iter these(param tag: iterKind, followThis)
+   .. itermethod:: iter these(param order: Ordering = Ordering.NONE): eltType
 
-   .. itermethod:: iter FIFO(): eltType
+   .. itermethod:: iter these(param order: Ordering = Ordering.NONE, param tag: iterKind)
 
-      
-      Iterates over the deque in First-In-First-Out order, from front to back. The
-      deque must be frozen or it will result in a halt. This operation is sequential.
-      
-
-   .. itermethod:: iter LIFO(): eltType
-
-      
-      Iterates over the deque in Last-In-First-Out order, from back to front. The
-      deque must be frozen or it will result in a halt. This operation is sequential.
-      
+   .. itermethod:: iter these(param order: Ordering = Ordering.NONE, param tag: iterKind, followThis)
 
    .. method:: proc deinit()
 

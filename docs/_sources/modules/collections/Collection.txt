@@ -35,6 +35,7 @@ Collection
       Removes an arbitrary element from this data structure.
       
       **BUG:** Compiler will segfault if the returned value is not captured at callsite.
+      Issue: #6542
       
       **FIX:** Ensure that you always capture the return value...
       
@@ -43,7 +44,7 @@ Collection
         var capturedRetval = c.remove()
       
       **BUG:** Loop Invariant Code Motion causes undefined behavior if assigned to a
-      variable declared outside of loop
+      variable declared outside of loop. Issue: #7003
       
       **FIX:** Use the `--no-loop-invariant-code-motion` to disable LICM.
       Otherwise, just make sure you always capture the return value inside of a loop
@@ -75,7 +76,19 @@ Collection
       Check if this data structure is empty.
       
 
-   .. method:: proc size(): int
+   .. method:: proc length: int
+
+      
+      Syntactic sugar for `getSize`.
+      
+
+   .. method:: proc size: int
+
+      
+      Syntactic sugar for `getSize`.
+      
+
+   .. method:: proc getSize(): int
 
       
       Obtain the number of elements contained in this collection.
@@ -87,39 +100,11 @@ Collection
       Iterate over all elements in the data structure.
       
       **BUG:** Compiler does not currently allow overloading standalone or leader/follower
-      iterators, and as such only serial iterators may be used with the base type.
+      iterators, and as such only serial iterators may be used with the base type. See
+      issue #6998
       
-
-   .. method:: proc freeze(): bool
-
-      
-      Declares this collection immutable.
-      
-      **NOTE:** This method may be removed from the core interface.
-      
-
-   .. method:: proc unfreeze(): bool
-
-      
-      Declares this collection mutable.
-      
-      **NOTE:** This method may be removed from the core interface.
-      
-
-   .. method:: proc canFreeze(): bool
-
-      
-      Whether this collection supports freezing.
-      
-      **NOTE:** This method may be removed from the core interface.
-      
-
-   .. method:: proc isFrozen(): bool
-
-      
-      Determines if this collection is currently frozen.
-      
-      **NOTE:** This method may be removed from the core interface.
+      **BUG:** Resources are not properly cleaned up when the user breaks or returns
+      from a serial iterator, and so this *must* be avoided at all cost. See issue #6912
       
 
 .. function:: proc +=(ref c: Collection(?eltType), elt: eltType)
