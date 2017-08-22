@@ -6,13 +6,38 @@ use Collection;
   FIFO, LIFO, and a Total ordering, where the order in which you add them will be
   the exact order you remove them in; for emphasis, a Deque can be used as a Queue,
   a Stack, and a List respectively. The deque enforces a 'barrier', which is a method
-  of checking whether you may proceed with an operation, that is wait-free under
-  most cases, lock-free in the worst case, which guarantees scalability. In the
-  barrier, we perform bounds checking (if a capacity is given). Deque operations
-  are separated into two levels: global and local. At a global level, we use
-  simple fetchAdd and fetchSub counters to denote which local deque we apply our
-  operation to, and at a local level we use an unrolled linked list which further
-  has its own (non-atomic) counter.
+  of checking whether you may proceed with an operation, that is wait-free which
+  guarantees scalability, where we perform bounds checking. Bounds checking performs
+  the necessary checks to ensure two invariants: A `pop` operation never proceeds
+  if the deque is empty, and that a `push` operation never proceeds if the deque
+  is full. In the case where we have a `pop` and a non-empty deque, or a `push`
+  with a non-full deque, we proceed within a single atomic fetchSub or fetchAdd
+  respectively, hence is wait-free. In the case that we have a `pop` with a
+  empty deque, or a `push` with a full deque, the queueSize becomes either
+  negative or over capacity. When this happens, the faulty operation will, via
+  remote execution (on-statement), perform a CAS-retry loop. If the opposite operation
+  (`push` is the opposite of `pop` and vice-verse) sees the size in a incorrect state,
+  it will continue its fetchSub/fetchAdd cycle, also bringing the size closer to
+  its correct state. Hence, the fetchSub/fetchAdd cycle is bounded in that the number
+  of faulty operations is bounded by the number of opposing operations and
+  is also bounded and wait-free. The CAS-retry loop is also bounded by the number
+  of overlapping operations and is helped along by the opposing operation, and hence
+  is also bounded and wait-free.
+
+  Deque operations are separated into three levels: global, local, and node.
+  At a global level, we use simple fetchAdd and fetchSub counters to denote which
+  local deque we apply our operation to based on the globalHead and globalTail in
+  a way that emulates a deque. At the local-level, after you acquire the LocalDeque
+  lock for an operation, you operate on linked nodes in a deque-like manner. Finally,
+  at the node-level, each linked list node is an unroll block which is also a deque
+  in and of itself. This hierarchical system ensures that we maintain this ordering
+  but opens up a bit of non-determinism in terms of overlapping tasks hashing to the
+  same LocalDeque, which is linearized on it's lock. While the Deque's ordering
+  of elements are always preserved, the ordering in which tasks enter the 'barrier'
+  to the point they complete their insertion is not. It is possible that given two
+  tasks A and B, for A to finish at the global level before B, but for B to finish
+  at the local level before A. However, it should be noted that for any MPMC queue,
+  this non-determinism is inherent in all lock-free and wait-free data structures.
 */
 
 /*
@@ -715,7 +740,7 @@ class DistributedDeque : Collection {
     }
 
     // Release in locking order...
-    for slot in slots do on slot slot.lock$;
+    for slot in slots do slot.lock$;
   }
 
   iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.LIFO {
@@ -776,14 +801,21 @@ class DistributedDeque : Collection {
     }
 
     // Release in locking order...
-    for slot in slots do on slot slot.lock$;
+    for slot in slots do slot.lock$;
   }
 
-  iter these(param tag : iterKind) where tag == iterKind.leader {
+  iter these(param order : Ordering = Ordering.NONE, param tag : iterKind) where tag == iterKind.leader {
+    if order != Ordering.NONE {
+      compilerWarning("Parallel iteration only supports ordering of type: ", Ordering.NONE);
+    }
     coforall slot in getPrivatizedThis.slots do on slot do yield slot;
   }
 
-  iter these(param tag : iterKind, followThis) where tag == iterKind.follower {
+  iter these(param order : Ordering = Ordering.NONE, param tag : iterKind, followThis) where tag == iterKind.follower {
+    if order != Ordering.NONE {
+      compilerWarning("Parallel iteration only supports ordering of type: ", Ordering.NONE);
+    }
+
     followThis.lock$ = true;
     var node = followThis.head;
 

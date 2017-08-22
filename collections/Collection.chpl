@@ -67,12 +67,15 @@ class Collection {
   }
 
   /*
-    Syntactic sugar for `size`.
+    Syntactic sugar for `getSize`.
   */
   inline proc length : int {
     return size();
   }
 
+  /*
+    Syntactic sugar for `getSize`.
+  */
   inline proc size : int {
     return getSize();
   }

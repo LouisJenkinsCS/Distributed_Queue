@@ -185,7 +185,7 @@ class DistributedBag : Collection {
     bag is empty, it will attempt to steal elements from bags of other nodes.
   */
   proc remove() : (bool, eltType) {
-    return localThis.bag.remove();
+    return getPrivatizedThis.bag.remove();
   }
 
   /*
@@ -306,7 +306,7 @@ class DistributedBag : Collection {
         var nElems = segment.nElems.read() : int;
         if nElems > average {
           var take = nElems - average;
-          var tmpBuffer = buffer + offset;
+          var tmpBuffer = buffer + bufferOffset;
           segment.transferElements(tmpBuffer, take, buffer.locale.id);
           bufferOffset += take;
         }

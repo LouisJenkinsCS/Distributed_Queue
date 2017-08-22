@@ -25,7 +25,7 @@ for i in 1 .. nElems {
   c.add(i);
 }
 
-assert(c.size() == nElems);
+assert(c.size == nElems);
 assert(c.contains((nElems / 2) : int));
 
 // Iterate over the collection.
@@ -34,11 +34,19 @@ for elem in c {
   actual = actual + elem;
 }
 assert(actual == expected);
-assert(c.size() == nElems);
+assert(c.size == nElems);
+
+// Iterate concurrently over the collection.
+var concurrentActual : atomic int;
+forall elem in c {
+  concurrentActual.add(elem);
+}
+assert(concurrentActual.read() == expected);
+assert(c.size == nElems);
 
 // Empty collection. Make sure all tasks start around same time...
 if isBag then c.balance();
-var concurrentActual : atomic int;
+concurrentActual.write(0);
 var barrier = new Barrier(here.maxTaskPar * numLocales);
 coforall loc in Locales do on loc {
   var perLocaleActual : atomic int;
@@ -57,5 +65,5 @@ coforall loc in Locales do on loc {
 }
 
 assert(concurrentActual.read() == expected);
-assert(c.size() == 0 && c.isEmpty());
+assert(c.size == 0 && c.isEmpty());
 writeln("SUCCESS");
