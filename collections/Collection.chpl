@@ -70,7 +70,7 @@ class Collection {
     Syntactic sugar for `getSize`.
   */
   proc length : int {
-    return size();
+    return getSize();
   }
 
   /*

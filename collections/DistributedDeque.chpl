@@ -146,6 +146,14 @@ class LocalDeque {
     if cached != nil {
       var tmp = cached;
       cached = nil;
+
+      // Clean...
+      tmp.headIdx = 1;
+      tmp.tailIdx = 1;
+      tmp.size = 0;
+      tmp.next = nil;
+      tmp.prev = nil;
+
       return tmp;
     }
 
@@ -382,7 +390,7 @@ class DistributedDeque : Collection {
     // Initialize each slot. We use a round-robin algorithm.
     var idx : atomic int;
     for 0 .. #here.maxTaskPar {
-      for loc in targetLocales do on loc {
+      coforall loc in targetLocales do on loc {
         var i = idx.fetchAdd(1);
         slots[i] = new LocalDeque(eltType);
       }
