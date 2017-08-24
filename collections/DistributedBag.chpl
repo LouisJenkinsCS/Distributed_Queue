@@ -1,14 +1,15 @@
 /*
-  A highly parallel segmented multiset. Each node gets its own bag, and in each bag
-  it is segmented into 'here.maxTaskPar' segments. Segments allow for actual parallelism
-  while operating in that it enables us to manage 'best-case', 'average-case',
-  and 'worst-case' scenarios by making multiple passes over each segment. In the
-  case where there is no oversubscription, the best-case will always be achieved
-  (considering any other conditions are also met), while in the case of oversubscription
-  or, for example a near empty bag, we fall into the 'average-case', etc. Examples
-  of 'best-case' scenarios for a removal would be when a segment is unlocked
-  and contains some elements we can drain, and the 'average-case' would be to find
-  any segment, unlocked or not, that contains elements we can drain, and so on.
+  A highly parallel segmented multiset. Each node gets its own bag, and in each 
+  bag it is segmented into 'here.maxTaskPar' segments. Segments allow for actual
+  parallelism while operating in that it enables us to manage 'best-case', 
+  'average-case', and 'worst-case' scenarios by making multiple passes over each
+  segment. In the case where there is no oversubscription, the best-case will 
+  always be achieved (considering any other conditions are also met), while in 
+  the case of oversubscription or, for example a near empty bag, we fall into 
+  the 'average-case', etc. Examples of 'best-case' scenarios for a removal would 
+  be when a segment is unlocked and contains some elements we can drain, and the 
+  'average-case' would be to find any segment, unlocked or not, that contains 
+  elements we can drain, and so on.
 
   This data structure also employs its own load balancing algorithm, beginning
   with a best-effort round-robin algorithm such that each task begins searching
@@ -54,14 +55,28 @@
 
   .. code-block:: chapel
 
-    var bag = makeDistributedBag(int, targetLocales=ourTargetLocales);
-
+    var bag = makeDistributedBag(int, targetLocales=Locales[0..1]);
+	
+	While usage of the `bag` can be used safely across locales, each locale has its own
+	instance allocated in it's address space, a `privatized` copy. While this instance
+	is managed transparently from the user, its impact on performance is significant.
+	For example, if all elements are allocated on a single locale, then other locales
+	will need perform work-stealing to obtain items, which degrades performance. However,
+	because initializing the structure from one node is appealing, the user may use the
+	:proc:`balance` method to redistribute data.
+		
+	.. code-block:: chapel
+		
+		forall elem in 1 .. 100 {
+			bag.add(elem);
+		}
+		bag.balance();
 */
 module DistributedBag {
   use Collection;
   use BlockDist;
   use SharedObject;
-
+  
   /*
     Below are segment statuses, which is a way to make visible to outsiders the
     current ongoing operation.
@@ -152,12 +167,14 @@ module DistributedBag {
     // Reference Counting...
     pragma "no doc"
     var _rc : Shared(DistributedBagRC(eltType));
-
+		
+		pragma "no doc"
     proc DistBag(type eltType, targetLocales = Locales) {
       _pid = (new DistributedBagImpl(eltType, targetLocales = targetLocales)).pid;
       _rc = new Shared(new DistributedBagRC(eltType, _pid = _pid));
     }
-
+	
+		pragma "no doc"
     inline proc _value {
       return chpl_getPrivatizedCopy(DistributedBagImpl(eltType), _pid);
     }
