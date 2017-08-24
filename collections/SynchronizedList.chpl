@@ -49,4 +49,12 @@ class SynchronizedList : Collection {
     }
     return (hasElem, elem);
   }
+
+  proc deinit() {
+    while head != nil {
+      var tmp = head.next;
+      delete head;
+      head = tmp;
+    }
+  }
 }

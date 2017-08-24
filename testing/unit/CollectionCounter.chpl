@@ -1,6 +1,6 @@
 use DistributedBag;
 use DistributedDeque;
-use Barrier;
+use Barriers;
 
 // For this test, we implement a simple counter; we add a predetermined number
 // of elements, then concurrently remove all elements from it until it is empty,
@@ -15,7 +15,7 @@ const expected = (nElems * (nElems + 1)) / 2;
 var c = (
   if isBoundedDeque then new DistributedDeque(int, cap=nElems)
   else if isDeque then new DistributedDeque(int)
-  else if isBag then new DistributedBag(int)
+  else if isBag then new DistBag(int)
   else compilerError("Require 'isBoundedDeque', 'isDeque', or 'isBag' to be set...")
 );
 

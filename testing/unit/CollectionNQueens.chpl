@@ -1,4 +1,4 @@
-use Barrier;
+use Barriers;
 use DistributedBag;
 use DistributedDeque;
 
@@ -141,14 +141,11 @@ proc canPlaceQueen(board, row, col) {
 type boardType = nQueens * int;
 const totalSolutions = getTotalSolutions();
 var found : atomic int;
-var c : Collection(boardType);
-if isDeque {
-  c = new DistributedDeque(boardType);
-} else if isBag {
-  c = new DistributedBag(boardType);
-} else {
-  halt("Require 'isDeque' or 'isBag' to be set...");
-}
+var c = (
+  if isDeque then new DistributedDeque(boardType)
+  else if isBag then new DistBag(boardType)
+  else compilerError("Require 'isDeque' or 'isBag' to be set...");
+);
 
 // Fill with initial board...
 c.add(_defaultOf(boardType));

@@ -129,7 +129,7 @@ module DistributedBag {
 
     proc deinit() {
       coforall loc in Locales do on loc {
-          delete chpl_getPrivatizedCopy(DistributedBagImpl(eltType).type, _pid);
+          delete chpl_getPrivatizedCopy(DistributedBagImpl(eltType), _pid);
       }
     }
   }
@@ -154,7 +154,7 @@ module DistributedBag {
     var _rc : Shared(DistributedBagRC(eltType));
 
     proc DistBag(type eltType, targetLocales = Locales) {
-      _pid = new DistributedBagImpl(eltType, targetLocales = targetLocales).pid;
+      _pid = (new DistributedBagImpl(eltType, targetLocales = targetLocales)).pid;
       _rc = new Shared(new DistributedBagRC(eltType, _pid = _pid));
     }
 
@@ -812,6 +812,17 @@ module DistributedBag {
       this.parentHandle = parentHandle;
     }
 
+    proc ~Bag() {
+      forall segment in segments {
+        var block = segment.headBlock;
+        while block != nil {
+          var tmp = block;
+          block = block.next;
+          delete tmp;
+        }
+      }
+    }
+
     proc add(elt : eltType) : bool {
       var startIdx = nextStartIdxEnq : int;
       var phase = ADD_BEST_CASE;
@@ -1093,16 +1104,5 @@ module DistributedBag {
 
       halt("DistributedBag Internal Error: DEADCODE");
     }
-  }
-}
-
-proc main() {
-  var bag = new DistBag(int);
-  forall i in 1 .. 100 do bag.add(i);
-  forall elem in bag do writeln(elem);
-
-  bag.balance();
-  coforall loc in Locales do on loc {
-    writeln(bag.remove());
   }
 }

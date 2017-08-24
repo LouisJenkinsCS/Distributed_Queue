@@ -390,7 +390,7 @@ class DistributedDeque : Collection {
     // Initialize each slot. We use a round-robin algorithm.
     var idx : atomic int;
     for 0 .. #here.maxTaskPar {
-      coforall loc in targetLocales do on loc {
+      for loc in targetLocales do on loc {
         var i = idx.fetchAdd(1);
         slots[i] = new LocalDeque(eltType);
       }

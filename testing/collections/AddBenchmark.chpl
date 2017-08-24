@@ -4,6 +4,10 @@ use SynchronizedList;
 use Benchmark;
 use Plot;
 
+class BagWrapper {
+  var bag : DistBag(int);
+}
+
 proc main() {
   var plotter : Plotter(int, real);
   var targetLocales = (1,2,4,8,16,32,64);
@@ -18,19 +22,6 @@ proc main() {
   var deinitFn = lambda(obj : object) {
     delete obj;
   };
-  
-  // DistributedQueue - Benchmark
-  runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
-      benchTime = 1,
-      deinitFn = deinitFn,
-      targetLocales=targetLocales,
-      benchName = "DistributedDeque",
-      plotter = plotter,
-      initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedDeque(int, targetLocales=bmd.targetLocales);
-      }
-  );
 
   // SynchronizedList - Benchmark
   runBenchmarkMultiplePlotted(
@@ -45,10 +36,23 @@ proc main() {
       }
   );
 
+  // DistributedQueue - Benchmark
+  runBenchmarkMultiplePlotted(
+      benchFn = benchFn,
+      benchTime = 1,
+      deinitFn = deinitFn,
+      targetLocales=targetLocales,
+      benchName = "DistributedDeque",
+      plotter = plotter,
+      initFn = lambda (bmd : BenchmarkMetaData) : object {
+        return new DistributedDeque(int, targetLocales=bmd.targetLocales);
+      }
+  );
+
   // DistributedBag - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
-        var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
+        var c = (bd.userData : BagWrapper).bag;
         for i in 1 .. bd.iterations {
           c.add(i);
         }
@@ -59,7 +63,7 @@ proc main() {
       benchName = "DistributedBag",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedBag(int);
+        return new BagWrapper(new DistBag(int, targetLocales=bmd.targetLocales));
       }
   );
 

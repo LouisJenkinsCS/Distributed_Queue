@@ -5,6 +5,10 @@ use SynchronizedList;
 use Benchmark;
 use Plot;
 
+class BagWrapper {
+  var bag : DistBag(int);
+}
+
 proc main() {
   var plotter : Plotter(int, real);
   var targetLocales = (1,2,4,8,16,32,64);
@@ -53,7 +57,7 @@ proc main() {
   // DistributedBag - Benchmark
   runBenchmarkMultiplePlotted(
       benchFn = lambda(bd : BenchmarkData) {
-        var c = (bd.userData : DistributedBag(int)).getPrivatizedInstance();
+        var c = (bd.userData : BagWrapper).bag;
         while true {
           var (hasElem, elem) = c.remove();
           if !hasElem then break;
@@ -65,10 +69,10 @@ proc main() {
       plotter = plotter,
       benchTime = 1,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        var c = new DistributedBag(int, targetLocales=bmd.targetLocales);
+        var c = new DistBag(int, targetLocales=bmd.targetLocales);
         forall i in 1 .. bmd.totalOps do c.add(i);
         c.balance();
-        return c;
+        return new BagWrapper(c);
       }
   );
 
