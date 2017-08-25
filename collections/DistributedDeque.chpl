@@ -65,9 +65,7 @@ module DistributedDeque {
     var _pid : int;
 
     proc deinit() {
-      coforall loc in Locales do on loc {
-          delete chpl_getPrivatizedCopy(DistributedBagImpl(eltType), _pid);
-      }
+      chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid);
     }
   }
 
@@ -84,7 +82,7 @@ module DistributedDeque {
     var _pid : int;
     // Reference counting
     pragma "no doc"
-    var _rc : SharedObject(DistributedDequeRC(eltType));
+    var _rc : Shared(DistributedDequeRC(eltType));
 
     proc DistDeque(type eltType, cap = -1, targetLocales = Locales) {
       _pid = (new DistributedDequeImpl(eltType, cap, targetLocales)).pid;
@@ -97,6 +95,17 @@ module DistributedDeque {
       }
       return chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid);
     }
+
+    pragma "no doc"
+    inline proc these(param order : Ordering = Ordering.NONE) {
+      return _value.these(order);
+    }
+
+    pragma "no doc"
+    inline proc these(param order : Ordering = Ordering.NONE, param tag) where
+        (tag == iterKind.leader || tag == iterKind.standalone) &&
+        __primitive("method call resolves", _value, "these", tag=tag)
+      return _value.these(order, tag=tag);
 
     forwarding _value;
   }
@@ -154,7 +163,7 @@ module DistributedDeque {
     pragma "no doc"
     var slots : [slotSpace] LocalDeque(eltType);
 
-    proc DistributedDeque(type eltType, cap : int = -1, targetLocales : [?locDom] locale =Locales) {
+    proc DistributedDequeImpl(type eltType, cap : int = -1, targetLocales : [?locDom] locale =Locales) {
       this.cap = cap;
       this.nSlots = here.maxTaskPar * targetLocales.size;
       this.slotSpace = {0..#this.nSlots};
@@ -189,7 +198,7 @@ module DistributedDeque {
     }
 
     pragma "no doc"
-    proc DistributedDeque(other, privData, type eltType = other.eltType) {
+    proc DistributedDequeImpl(other, privData, type eltType = other.eltType) {
       this.cap = other.cap;
       this.targetLocDom = other.targetLocDom;
       this.targetLocales = other.targetLocales;
@@ -203,7 +212,7 @@ module DistributedDeque {
 
     pragma "no doc"
     proc dsiPrivatize(privData) {
-        return new DistributedDeque(this, privData);
+        return new DistributedDequeImpl(this, privData);
     }
 
     pragma "no doc"
@@ -626,7 +635,7 @@ module DistributedDeque {
       followThis.lock$;
     }
 
-    proc ~DistributedDeque() {
+    proc ~DistributedDequeImpl() {
       for slot in slots do delete slot;
     }
   }
