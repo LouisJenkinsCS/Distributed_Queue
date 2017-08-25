@@ -144,7 +144,7 @@ var found : atomic int;
 var c = (
   if isDeque then new DistDeque(boardType)
   else if isBag then new DistBag(boardType)
-  else compilerError("Require 'isDeque' or 'isBag' to be set...");
+  else compilerError("Require 'isDeque' or 'isBag' to be set...")
 );
 
 // Fill with initial board...

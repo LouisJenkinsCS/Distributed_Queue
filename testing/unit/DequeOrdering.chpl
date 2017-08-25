@@ -104,7 +104,7 @@ if isBounded then assert(deque.pushBack(nElems + 1) == false && deque.pushBack(n
 // Total Ordering Check [Pt. 1]
 // Since the end result is similar to if we inserted it in First-In-First-Out order (1..nElems), wee
 // should be able to iterate over it in FIFO order.
-var expect = 1;
+expect = 1;
 for elem in deque.these(Ordering.FIFO) {
   assert(elem == expect);
   expect += 1;
@@ -112,9 +112,10 @@ for elem in deque.these(Ordering.FIFO) {
 
 // Total Ordering Check [Pt. 2]
 // Following the above logic, we should also be capable of iterating over it in reverse in LIFO order.
-for i in 0 .. #nElems {
-  var (hasElem, elem) = deque.pop();
-  assert(hasElem && elem == nElems - i);
+expect = nElems;
+for elem in deque.these(Ordering.LIFO) {
+  assert(elem == expect);
+  expect -= 1;
 }
 
 // Total Ordering Check [Pt. 3]
