@@ -227,6 +227,11 @@ module DistributedBag {
       this.pid = pid;
     }
 
+
+    proc ~DistributedBagImpl() {
+      delete bag;
+    }
+
     pragma "no doc"
     proc dsiPrivatize(pid) {
       return new DistributedBagImpl(this, pid);

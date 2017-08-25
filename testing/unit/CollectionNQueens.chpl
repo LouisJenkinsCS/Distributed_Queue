@@ -142,7 +142,7 @@ type boardType = nQueens * int;
 const totalSolutions = getTotalSolutions();
 var found : atomic int;
 var c = (
-  if isDeque then new DistributedDeque(boardType)
+  if isDeque then new DistDeque(boardType)
   else if isBag then new DistBag(boardType)
   else compilerError("Require 'isDeque' or 'isBag' to be set...");
 );

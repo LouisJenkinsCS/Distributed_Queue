@@ -65,7 +65,11 @@ module DistributedDeque {
     var _pid : int;
 
     proc deinit() {
-      chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid);
+      chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid).destroy();
+      coforall loc in Locales do on loc {
+        delete chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid);
+      }
+      
     }
   }
 
@@ -635,7 +639,7 @@ module DistributedDeque {
       followThis.lock$;
     }
 
-    proc ~DistributedDequeImpl() {
+    proc Destroy() {
       for slot in slots do delete slot;
     }
   }
