@@ -11,14 +11,17 @@ This project was made possible through the Google Summer of Code program, who pr
 stipend to live on, gave me the once-in-a-lifetime chance to design and develop new solutions in the
 area of distributed computing (PGAS in particular), provided the more-than-necessary resources (Cray-XC40
 cluster), and a way to learn more exciting and useful knowledge. As well, I would like to thank both of my
-mentors, @e-kayrakli and @mppf, who I have had the honor to server under. Finally, I would like to thank
-the Chapel project itself.
+mentors, [**@e-kayrakli**](https://github.com/e-kayrakli) and [**@mppf**](https://github.com/mppf), who I 
+have had the honor to server under. Finally, I would like to thank the Chapel project itself.
 
 ### Pull Requests & Discussions
 
 Below I will list all Pull Requests. Not all are guaranteed to be merged at the time of this posting.
 
 #### GlobalAtomicObject
+
+[Discussion](https://github.com/chapel-lang/chapel/issues/6663) **(On Hold)**
+[Pull Request](https://github.com/chapel-lang/chapel/pull/6717) **(Closed)**
 
 Currently, the `GlobalAtomicObject` is an actual solution to a very big problem in distributed computing.
 Atomic operations on remote memory is a very tricky topic. There are multiple approaches, but as HPC demands
@@ -32,7 +35,7 @@ As a PGAS (Partitioned Global Address Space) language, Chapel allows operations 
 with respect to which node the memory is allocated on. Hence, if you can perform atomic operations on local
 memory, you can make them on remote memory too. There are two ways in which these atomic operations are handled: 
 
-1) Remote Execution Atomic Operations
+1) **Remote Execution Atomic Operations**
 
 	This is the most naive, but it is performed when nodes lack NICs like Aries which support network atomics
 	at a hardware level, and is most commonly used when applications run locally. For example, imagine if the
@@ -47,7 +50,7 @@ memory, you can make them on remote memory too. There are two ways in which thes
 	In this case, while it is technically wait-free as it is technically bounded by network latency, it must spawn 
 	a remote task on the target node, and causes the current task to block until it returns. This is performed implicitly, but the performance penalty is severe enough to bottleneck any application. Furthermore, spawning a remote task deprives the target node of valuable resources, and as such results in degrading performance.
 
-2) Network Atomic Operations
+2) **Network Atomic Operations**
 
 	This requires very specific hardware, such as the Aries NIC, which is Cray proprietary hardware and top-of-the-line.
 	This is required for scalable (or even acceptable) performance for ordered data structures. Using the same example
@@ -75,7 +78,10 @@ performing the atomic operations using 64-bit descriptors. This approach, while 
 significantly improve performance.
 
 
-#### Collections Module - Initial
+#### Collections Module
+
+[Discussion](https://github.com/chapel-lang/chapel/issues/6812) **Finished**
+[Pull Request](https://github.com/chapel-lang/chapel/pull/7062) **Merged**
 
 This is the initial pull request, which was officially merged to run under nightly testing.
 
