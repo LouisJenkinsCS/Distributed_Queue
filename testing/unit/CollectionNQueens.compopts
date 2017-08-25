@@ -1,2 +1,2 @@
-../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl -sisDeque --main-module=CollectionNQueens
-../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl -sisBag --main-module=CollectionNQueens
+../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl ../../collections/Collection.chpl -sisDeque --main-module=CollectionNQueens --devel --baseline
+../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl ../../collections/Collection.chpl -sisBag --main-module=CollectionNQueens --devel --baseline

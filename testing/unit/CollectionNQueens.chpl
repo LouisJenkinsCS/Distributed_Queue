@@ -164,6 +164,8 @@ coforall loc in Locales do on loc {
         if nSpins == 1000000 {
           halt("Spun: ", nSpins);
         }
+
+        chpl_task_yield();
         continue;
       }
 
