@@ -8,24 +8,27 @@ class BagWrapper {
   var bag : DistBag(int);
 }
 
+class DequeWrapper {
+  var deque : DistDeque(int);
+}
+
 proc main() {
   var plotter : Plotter(int, real);
   var targetLocales = (1,2,4,8,16,32,64);
 
-  // Collections share the same API and hence share the same benchFn and deinitFn
-  var benchFn = lambda(bd : BenchmarkData) {
-    var c = bd.userData : Collection(int);
-    for i in 1 .. bd.iterations {
-      c.add(i);
-    }
-  };
+  // Collections share the same API and hence share the same deinitFn
   var deinitFn = lambda(obj : object) {
     delete obj;
   };
 
   // SynchronizedList - Benchmark
   runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
+      benchFn = lambda(bd : BenchmarkData) {
+        var c = bd.userData : CollectionImpl(int);
+        for i in 1 .. bd.iterations {
+          c.add(i);
+        }
+      },
       benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
@@ -36,16 +39,21 @@ proc main() {
       }
   );
 
-  // DistributedQueue - Benchmark
+  // DistributedDeque - Benchmark
   runBenchmarkMultiplePlotted(
-      benchFn = benchFn,
+      benchFn = lambda(bd : BenchmarkData) {
+        var c = (bd.userData : DequeWrapper).deque;
+        for i in 1 .. bd.iterations {
+          c.add(i);
+        }
+      },
       benchTime = 1,
       deinitFn = deinitFn,
       targetLocales=targetLocales,
       benchName = "DistributedDeque",
       plotter = plotter,
       initFn = lambda (bmd : BenchmarkMetaData) : object {
-        return new DistributedDeque(int, targetLocales=bmd.targetLocales);
+        return new DequeWrapper(new DistDeque(int, targetLocales=bmd.targetLocales));
       }
   );
 
