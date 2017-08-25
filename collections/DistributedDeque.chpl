@@ -14,7 +14,7 @@
   empty deque, or a `push` with a full deque, the queueSize becomes either
   negative or over capacity. When this happens, the faulty operation will, via
   remote execution (on-statement), perform a CAS-retry loop. If the opposite operation
-  (`push` is the opposite of `pop` and vice-verse) sees the size in a incorrect state,
+  (`push` is the opposite of `pop` and vice-versa) sees the size in a incorrect state,
   it will continue its fetchSub/fetchAdd cycle, also bringing the size closer to
   its correct state. Hence, the fetchSub/fetchAdd cycle is bounded in that the number
   of faulty operations is bounded by the number of opposing operations and

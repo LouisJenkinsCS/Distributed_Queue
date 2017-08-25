@@ -27,7 +27,7 @@
   achieve parallelism across segments for removal operations. Lastly, we attempt
   to steal a maximum of `N / sizeof(eltType)`, where N is some size in megabytes
   (representing how much data can be sent in one network request), which keeps
-  down excessive communication.
+  down excessive communication. 
 
   This data structure does not come without flaws; as work stealing is dynamic
   and triggered on demand, work stealing can still be performed in excess, which
@@ -80,7 +80,10 @@ module DistributedBag {
   
   /*
     Below are segment statuses, which is a way to make visible to outsiders the
-    current ongoing operation.
+    current ongoing operation. In segments, we use test-and-test-and-set spinlocks
+    to allow polling for other conditions other than lock state. `sync` variables
+    do not offer a means of acquiring in a non-blocking way, so this is needed to
+    ensure better 'best-case' and 'average-case' phases.
   */
   private param STATUS_UNLOCKED : uint = 0;
   private param STATUS_ADD : uint = 1;
@@ -89,14 +92,19 @@ module DistributedBag {
   private param STATUS_BALANCE : uint = 4;
 
   /*
-    Below are statuses specific to the work stealing algorithm.
+    Below are statuses specific to the work stealing algorithm. These allow the
+    shepard tasks to know when its sub-helpers finish and the end status of their
+    work stealing attempt.
   */
   private param WS_INITIALIZED = -1;
   private param WS_FINISHED_WITH_NO_WORK = 0;
   private param WS_FINISHED_WITH_WORK = 1;
 
   /*
-    The phases for operations.
+    The phases for operations. An operation is composed of multiple phases,
+    where they make a full pass searching for ideal conditions, then less-than-ideal
+    conditions; this is required to ensure maximized parallelism at all times, and
+    critical to good performance, especially when a node is oversubscribed.
   */
   private param ADD_BEST_CASE = 0;
   private param ADD_AVERAGE_CASE = 1;
@@ -139,6 +147,7 @@ module DistributedBag {
   /*
     Reference counter for DistributedBag
   */
+  pragma "no doc"
   class DistributedBagRC {
     type eltType;
     var _pid : int;
@@ -227,7 +236,7 @@ module DistributedBag {
       this.pid = pid;
     }
 
-
+    pragma "no doc"
     proc ~DistributedBagImpl() {
       delete bag;
     }
@@ -343,8 +352,8 @@ module DistributedBag {
       often. Dynamic work stealing handles cases where there is a relatively fair
       distribution across majority of nodes, but this should be called when you have
       a severe imbalance, or when you have a smaller number of elements to balance.
-      Furthermore, while this operation is parallel-safe, it should be called in a
-      sequential context.
+      Furthermore, while this operation is parallel-safe, it should be called from at
+      most one task.
     */
     proc balance() {
       var localThis = getPrivatizedThis;
@@ -398,11 +407,6 @@ module DistributedBag {
         }
 
         // With the excess elements, redistribute it...
-        // BUG: Need to use Chapel Arrays due to issues with compiler automatically
-        // dereferencing a C_Ptr resulting in a segfault.
-        // BUG: Without '--no-denormalization' flag, the compiler will incorrectly
-        // use everything beyond this point by reference and *not* dereference it
-        // beforehand, causing more undefined behavior. For now, I use Chapel Arrays.
         bufferOffset = 0;
         for loc in localThis.targetLocales do on loc {
           var average = avg;
@@ -452,14 +456,19 @@ module DistributedBag {
       but opens the possibility to iterating over duplicates or missing elements
       from concurrent operations.
 
+      **Note:** `zip` iteration is not yet supported with rectangular data structures.
+
       **Warning:** Breaking from an iterator will leak the snapshot due to issue #6912.
       It will however leave all Bags in a safe state.
+
+      **Warning:** Iteration takes a snapshot approach, and as such can easily result in a
+      Out-Of-Memory issue. If the data structure is large, the user is doubly advised to use
+      parallel iteration, for both performance and memory benefit.
     */
     iter these() : eltType {
       for loc in targetLocales {
         for segmentIdx in 0..#here.maxTaskPar {
           // The size of the snapshot is only known once we have the lock.
-          // BUG: c_ptr does not seem to work here and causes a segmentation fault at runtime.
           var dom : domain(1) = {0..-1};
           var buffer : [dom] eltType;
 
@@ -467,15 +476,17 @@ module DistributedBag {
             ref segment = getPrivatizedThis.bag.segments[segmentIdx];
 
             if segment.acquireIfNonEmpty(STATUS_LOOKUP) {
+              dom = {0..#segment.nElems.read() : int};
               var block = segment.headBlock;
+              var idx = 0;
               while block != nil {
                 for i in 0 .. #block.size {
-                    buffer.push_back(block.elems[i]);
+                    buffer[idx] = block.elems[i];
+                    idx += 1;
                 }
                 block = block.next;
               }
               segment.releaseStatus();
-
             }
           }
 
@@ -531,6 +542,9 @@ module DistributedBag {
     of memory. Each segment block size *should* be a power of two, as we increase the
     size of each subsequent unroll block by twice the size. This is so that stealing
     work is faster in that majority of elements are confined to one area.
+
+    It should be noted that the block itself is not parallel-safe, and access must be
+    synchronized.
   */
   pragma "no doc"
   class BagSegmentBlock {
