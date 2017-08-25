@@ -4,17 +4,18 @@
 
   1. Is safe parallel-safe, hence is safe to use across multiple tasks across multiple locales.
   2. Supports the basic operations that any data structure needs to be truly useful, that is:
-    a. Insertion of an arbitrary element
-    b. Removal of an arbitrary element
-    c. Lookup of an specific element
+    a. Insertion of an arbitrary element. From this, we can insert bulk arbitrary elements.
+    b. Removal of an arbitrary element. From this, we can remove bulk arbitrary elements.
+    c. Iteration over all elements. From this, we can perform lookups over all elements.
+  
+  From the standpoint of the user, who directly benefits, they obtain a very nice but minimal
+  guarantee on the object they are using, and from the implementor's view, they get to the
+  benefit from both implementing a well-design interface, and from getting some utility methods 
+  'for-free'.
 */
 
-/*
-  A 'Collection' is a data structure, a container for elements that provide support
-  for insert, lookup, remove, and iteration operations.
-*/
-module Collection-Interface {
-  class Collection {
+module Collection {
+  class CollectionImpl {
     /*
       The type of element that this Collection holds.
     */
@@ -31,6 +32,12 @@ module Collection-Interface {
       Add all elements in bulk to this data structure. If the data structure
       rejects an element, we cease to offer more. We return the number of elements
       successfully added to this data structure.
+
+      **Warning:** While this method will add as many items as possible, it will `break`
+      when it is unable to consume more elements. Due to the fact that using `break` in
+      an iterator will cause a memory leak and potentially leave this data structure in
+      a undefined state, this should not be used to append another data structure to a
+      bounded structure unless it is known it will succeed.
     */
     proc addBulk(elts) : int {
       var successful : int;
@@ -41,6 +48,8 @@ module Collection-Interface {
 
         successful += 1;
       }
+
+      return successful;
     }
 
     /*
@@ -90,7 +99,7 @@ module Collection-Interface {
           break;
         }
 
-        dom[idx] = elt;
+        arr[idx] = elt;
         idx += 1;
       }
 
@@ -178,7 +187,7 @@ module Collection-Interface {
     As such, this cannot be used where `ref` intents cannot be used, such as ``forall``
     and ``coforall`` loops.
   */
-  inline proc +=(const ref c : Collection(?eltType), elt : eltType) {
+  inline proc +=(ref c : CollectionImpl(?eltType), elt : eltType) {
     c.add(elt);
   }
 }

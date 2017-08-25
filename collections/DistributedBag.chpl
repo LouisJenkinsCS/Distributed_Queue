@@ -203,10 +203,11 @@ module DistributedBag {
       return _value.these(tag=tag);
 
     forwarding _value;
+    forwarding _value.super only addBulk, removeBulk, isEmpty;
   }
 
   pragma "no doc"
-  class DistributedBagImpl : Collection {
+  class DistributedBagImpl : CollectionImpl {
     pragma "no doc"
     var targetLocDom : domain(1);
     /*

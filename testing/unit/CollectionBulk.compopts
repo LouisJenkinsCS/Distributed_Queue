@@ -1,0 +1,3 @@
+../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl ../../collections/Collection.chpl -sisDeque --main-module=CollectionBulk --baseline
+../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl ../../collections/Collection.chpl -sisBag --main-module=CollectionBulk
+../../collections/DistributedBag.chpl ../../collections/DistributedDeque.chpl ../../collections/Collection.chpl -sisBoundedDeque --main-module=CollectionBulk --baseline

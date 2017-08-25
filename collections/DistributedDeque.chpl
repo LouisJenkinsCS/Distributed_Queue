@@ -65,7 +65,7 @@ module DistributedDeque {
     var _pid : int;
 
     proc deinit() {
-      chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid).destroy();
+      chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid).Destroy();
       coforall loc in Locales do on loc {
         delete chpl_getPrivatizedCopy(DistributedDequeImpl(eltType), _pid);
       }
@@ -112,6 +112,7 @@ module DistributedDeque {
       return _value.these(order, tag=tag);
 
     forwarding _value;
+    forwarding _value.super only addBulk, removeBulk, isEmpty;
   }
 
   /*
@@ -132,7 +133,7 @@ module DistributedDeque {
     Stack, or even a List.
   */
   pragma "no doc"
-  class DistributedDequeImpl : Collection {
+  class DistributedDequeImpl : CollectionImpl {
     /*
       Capacity, the maximum number of elements a Deque can hold. A `cap` of -1 is
       considered unbounded.
