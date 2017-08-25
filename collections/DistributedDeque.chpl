@@ -86,6 +86,11 @@ module DistributedDeque {
     pragma "no doc"
     var _rc : SharedObject(DistributedDequeRC(eltType));
 
+    proc DistDeque(type eltType, cap = -1, targetLocales = Locales) {
+      _pid = (new DistributedDequeImpl(eltType, cap, targetLocales)).pid;
+      _rc = new Shared(new DistributedDequeRC(eltType, _pid = _pid));
+    }
+
     inline proc _value {
       if _pid == -1 {
         halt("DistDeque is uninitialized...");
