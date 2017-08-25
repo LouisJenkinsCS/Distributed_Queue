@@ -42,8 +42,8 @@ for i in 1 .. nElems {
 // Sanity Check: Ensures size is correct
 assert(deque.size == 0 && deque.isEmpty());
 // Sanity Check: Ensures that we handle being empty.
-var hasElem = deque.dequeue()[1];
-assert(deque.size == 0 && deque.isEmpty() && !hasElem);
+var isEmpty = !deque.dequeue()[1];
+assert(deque.size == 0 && deque.isEmpty() && isEmpty);
 
 // Last-In-First-Out Test
 // We add elements in a stack-like fashion, testing stack capabilities.

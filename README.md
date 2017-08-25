@@ -1,9 +1,50 @@
 # Distributed Data Structures
 
 This repository hosts the first framework for distributed data structures for the
-Chapel programming language. Here we introduce a 'Collections API', based on Java's
-Collections framework, as well as some data structures, some distributed, others
-local. Documentation can be seen [here](https://louisjenkinscs.github.io/Distributed-Data-Structures/).
+Chapel programming language. Here we introduce a 'Collections' module, based on Java's
+Collections framework, as well as two scalable data structures (one ordered, one unordered). 
+Documentation can be seen [here](https://louisjenkinscs.github.io/Distributed-Data-Structures/).
+
+## GSoC Information
+
+This project was made possible through the Google Summer of Code program, who provided me an ample
+stipend to live on, gave me the once-in-a-lifetime chance to design and develop new solutions in the
+area of distributed computing (PGAS in particular), provided the more-than-necessary resources (Cray-XC40
+cluster), and a way to learn more exciting and useful knowledge. As well, I would like to thank both of my
+mentors, @e-kayrakli and @mppf, who I have had the honor to server under. Finally, I would like to thank
+the Chapel project itself.
+
+### Pull Requests & Discussions
+
+Below I will list all Pull Requests. Not all are guaranteed to be merged at the time of this posting.
+
+#### GlobalAtomicObject
+
+Currently, the `GlobalAtomicObject` is an actual solution to a very big problem in distributed computing.
+Atomic operations on remote memory is a very tricky topic, as currently in Chapel there are two approaches:
+
+1) Remote Execution Atomic Operations
+
+	This is the most naive, but it is performed when nodes lack NICs like Aries which support network atomics
+	at a hardware level, and is most commonly used when applications run locally. For example, imagine if the
+	user were want to perform a 'wait-free' atomic operation, such as `fetchAdd` on some remote memory location.
+	Without a NIC supporting network atomics, it boils down to the below...
+
+	```chpl
+	var _value : atomic int;
+	on _value do _value.fetchAdd(1);
+	```
+
+	In this case, this is no longer wait-free as it spawns a remote task on the target node, and causes the current
+	task to block until it returns. This is performed implicitly, but the performance penalty is severe enough to
+	bottleneck any application. Furthermore, spawning a remote task deprives the target node of valuable resources,
+	and as such results in degrading performance.
+	
+2) Network Atomic Operations
+
+#### Collections Module - Initial
+
+This is the initial pull request, which was officially merged to run under nightly testing.
 
 ## Performance Testing
 

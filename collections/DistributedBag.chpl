@@ -203,7 +203,7 @@ module DistributedBag {
       return _value.these(tag=tag);
 
     forwarding _value;
-    forwarding _value.super only addBulk, removeBulk, isEmpty;
+    forwarding _value.super only addBulk, removeBulk, isEmpty, size, length;
   }
 
   pragma "no doc"
