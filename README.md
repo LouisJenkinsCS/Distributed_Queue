@@ -21,6 +21,7 @@ Below I will list all Pull Requests. Not all are guaranteed to be merged at the 
 #### GlobalAtomicObject
 
 [Discussion](https://github.com/chapel-lang/chapel/issues/6663) **(On Hold)**
+
 [Pull Request](https://github.com/chapel-lang/chapel/pull/6717) **(Closed)**
 
 Currently, the `GlobalAtomicObject` is an actual solution to a very big problem in distributed computing.
@@ -81,6 +82,7 @@ significantly improve performance.
 #### Collections Module
 
 [Discussion](https://github.com/chapel-lang/chapel/issues/6812) **Finished**
+
 [Pull Request](https://github.com/chapel-lang/chapel/pull/7062) **Merged**
 
 This is the initial pull request, which was officially merged to run under nightly testing.

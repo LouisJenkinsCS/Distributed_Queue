@@ -112,7 +112,6 @@ module DistributedDeque {
       return _value.these(order, tag=tag);
 
     forwarding _value;
-    forwarding _value.super only addBulk, removeBulk, isEmpty, size, length;
   }
 
   /*
