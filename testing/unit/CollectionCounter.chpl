@@ -1,6 +1,6 @@
-use DistributedBag;
-use DistributedDeque;
 use Barriers;
+use DistributedDeque;
+use DistributedBag;
 
 // For this test, we implement a simple counter; we add a predetermined number
 // of elements, then concurrently remove all elements from it until it is empty,

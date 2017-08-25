@@ -641,6 +641,9 @@ module DistributedDeque {
 
     proc Destroy() {
       for slot in slots do delete slot;
+      delete globalHead;
+      delete globalTail;
+      delete queueSize;
     }
   }
 
