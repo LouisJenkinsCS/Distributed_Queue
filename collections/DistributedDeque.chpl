@@ -101,6 +101,16 @@ module DistributedDeque {
     forwarding _value;
   }
 
+  // Atomic counters that are allocated on a single node used by privatized instances.
+  // Because these classes can be allocated on nodes at-will, we can distributed these
+  // to random nodes.
+  pragma "no doc"
+  class DistributedDequeCounter {
+    var _value : atomic int;
+
+    forwarding _value;
+  }
+
   /*
     A parallel-safe scalable distributed double-ended queue that supports both
     insertion and removal from either end of the queue. Can be used as a Queue,
@@ -126,11 +136,11 @@ module DistributedDeque {
 
     // Keeps track of which slot we are on...
     pragma "no doc"
-    var globalHead : atomic int;
+    var globalHead : DistributedDequeCounter;
     pragma "no doc"
-    var globalTail : atomic int;
+    var globalTail : DistributedDequeCounter;
     pragma "no doc"
-    var queueSize : atomic int;
+    var queueSize : DistributedDequeCounter;
 
     // We maintain an array of slots, wherein each slot is a pointer into a node's
     // address space. To maximize parallelism, we maintain numLocales * maxTaskPar
@@ -158,6 +168,21 @@ module DistributedDeque {
         }
       }
 
+      // Distribute the globalHead, globalTail, and queueSize over the first 3 nodes...
+      var countersLeftToAlloc = 3;
+      while countersLeftToAlloc > 0 {
+        for loc in targetLocales do on loc {
+          select countersLeftToAlloc {
+            when 3 do globalHead = new DistributedDequeCounter();
+            when 2 do globalTail = new DistributedDequeCounter();
+            when 1 do queueSize = new DistributedDequeCounter();
+          }
+
+          countersLeftToAlloc -= 1;
+        }
+      }
+      
+
       pid = _newPrivatizedClass(this);
     }
 
@@ -166,6 +191,9 @@ module DistributedDeque {
       this.cap = other.cap;
       this.targetLocDom = other.targetLocDom;
       this.targetLocales = other.targetLocales;
+      this.globalHead = other.globalHead;
+      this.globalTail = other.globalTail;
+      this.queueSize = other.queueSize;
       this.nSlots = other.nSlots;
       this.slotSpace = {0..#this.nSlots};
       slots = other.slots;
