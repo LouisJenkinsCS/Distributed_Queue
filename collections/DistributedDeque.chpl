@@ -101,9 +101,11 @@ module DistributedDeque {
     forwarding _value;
   }
 
-  // Atomic counters that are allocated on a single node used by privatized instances.
-  // Because these classes can be allocated on nodes at-will, we can distributed these
-  // to random nodes.
+  /*
+    Atomic counters that are allocated on a single node used by privatized instances.
+    This comes with the benefit of being able to distribute communication across multiple
+    nodes rather than one instance.
+  */
   pragma "no doc"
   class DistributedDequeCounter {
     var _value : atomic int;
@@ -215,9 +217,9 @@ module DistributedDeque {
     }
 
     pragma "no doc"
-    inline proc enterRemoveBarrier(localThis) {
+    inline proc enterRemoveBarrier() {
       // If we have a capacity of 0, then we can't really remove anything anyway.
-      if localThis.cap == 0 {
+      if cap == 0 {
         return false;
       }
 
@@ -232,7 +234,7 @@ module DistributedDeque {
 
         // Negative, fix before returning...
         if size <= 0 {
-          on this {
+          on queueSize {
             var readSize = queueSize.read();
             // Attempt to fix, but yield to reduce potential contention and CPU hogging.
             while readSize < 0 && !queueSize.compareExchangeWeak(readSize, 0) {
@@ -247,7 +249,7 @@ module DistributedDeque {
         // If we have a cap, then at this point, we have something between [0, cap],
         // if we do not have a cap then there is no need to 'fix' the queue size;
         // in both cases we are safe.
-        else if localThis.cap < 0 || size <= localThis.cap {
+        else if cap < 0 || size <= cap {
           break;
         }
         // If the size is over capacity, a enqueuer has overcommitted. Since there can
@@ -258,9 +260,9 @@ module DistributedDeque {
     }
 
     pragma "no doc"
-    inline proc enterAddBarrier(localThis) {
+    inline proc enterAddBarrier() {
       // If we have a capacity of 0, then we can't really add anything anyway.
-      if localThis.cap == 0 {
+      if cap == 0 {
         return false;
       }
 
@@ -271,13 +273,13 @@ module DistributedDeque {
       // size in a lock-free manner (for as long as it is over capacity). It should be
       // noted that if we see that the queue size is negative, meaning a dequeue operation
       // has over committed, we consequentially help them as well during the fetch-add loop.
-      if localThis.cap > 0 {
+      if cap > 0 {
         while true {
           var size = queueSize.fetchAdd(1);
 
           // Over capacity, fix before returning...
-          if size >= localThis.cap {
-            on this {
+          if size >= cap {
+            on queueSize {
               var readSize = queueSize.read();
               // Attempt to fix, but yield to reduce potential contention and CPU hogging.
               while readSize > this.cap && !queueSize.compareExchangeWeak(readSize, this.cap) {
@@ -363,17 +365,15 @@ module DistributedDeque {
       Appends the element to the tail.
     */
     proc pushBack(elt : eltType) : bool {
-      var localThis = getPrivatizedThis;
-
       // Test for if we can continue...
-      if enterAddBarrier(localThis) == false {
+      if enterAddBarrier() == false {
         return false;
       }
 
       // At this point, we know we have a space for us. We find our slot based on another
       // fetch-add counter, making this wait-free as well.
-      var tail = globalTail.fetchAdd(1) % localThis.nSlots;
-      localThis.slots[abs(tail)].pushBack(elt);
+      var tail = globalTail.fetchAdd(1) % nSlots;
+      slots[abs(tail)].pushBack(elt);
       return true;
     }
 
@@ -381,16 +381,14 @@ module DistributedDeque {
       Removes the element at the tail.
     */
     proc popBack() : (bool, eltType) {
-      var localThis = getPrivatizedThis;
-
       // Test for if we can continue...
-      if enterRemoveBarrier(localThis) == false {
+      if enterRemoveBarrier() == false {
         return (false, _defaultOf(eltType));
       }
 
       // We find our slot based on another fetch-add counter, making this wait-free as well.
-      var tail = (globalTail.fetchSub(1) - 1) % localThis.nSlots;
-      var elt = localThis.slots[abs(tail)].popBack();
+      var tail = (globalTail.fetchSub(1) - 1) % nSlots;
+      var elt = slots[abs(tail)].popBack();
       return (true, elt);
     }
 
@@ -398,16 +396,14 @@ module DistributedDeque {
       Appends the element to the head.
     */
     proc pushFront(elt : eltType) : bool {
-      var localThis = getPrivatizedThis;
-
       // Test if we can continue...
-      if enterAddBarrier(localThis) == false {
+      if enterAddBarrier() == false {
         return false;
       }
 
       // We find our slot based on another fetch-add counter, making this wait-free as well.
-      var head = (globalHead.fetchSub(1) - 1) % localThis.nSlots;
-      localThis.slots[abs(head)].pushFront(elt);
+      var head = (globalHead.fetchSub(1) - 1) % nSlots;
+      slots[abs(head)].pushFront(elt);
       return true;
     }
 
@@ -415,16 +411,14 @@ module DistributedDeque {
       Removes the element at the head.
     */
     proc popFront() : (bool, eltType) {
-      var localThis = getPrivatizedThis;
-
       // Test for if we can continue...
-      if enterRemoveBarrier(localThis) == false {
+      if enterRemoveBarrier() == false {
         return (false, _defaultOf(eltType));
       }
 
       // We find our slot based on another fetch-add counter, making this wait-free as well.
-      var head = globalHead.fetchAdd(1) % localThis.nSlots;
-      var elt = localThis.slots[abs(head)].popFront();
+      var head = globalHead.fetchAdd(1) % nSlots;
+      var elt = slots[abs(head)].popFront();
       return (true, elt);
     }
 
@@ -459,7 +453,7 @@ module DistributedDeque {
       some global locking order.
     */
     iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.NONE {
-      for slot in getPrivatizedThis.slots {
+      for slot in slots {
         slot.lock$ = true;
         var node = slot.head;
 
@@ -481,8 +475,6 @@ module DistributedDeque {
     }
 
     iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.FIFO {
-      var localThis = getPrivatizedThis;
-
       // Fill our slots to visit in FIFO order.
       var head = globalHead.read();
       var tail = globalTail.read();
@@ -542,8 +534,6 @@ module DistributedDeque {
     }
 
     iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.LIFO {
-      var localThis = getPrivatizedThis;
-
       // Fill our slots to visit in FIFO order.
       var head = globalHead.read();
       var tail = globalTail.read();
@@ -609,7 +599,7 @@ module DistributedDeque {
       if order != Ordering.NONE {
         compilerWarning("Parallel iteration only supports ordering of type: ", Ordering.NONE);
       }
-      coforall slot in getPrivatizedThis.slots do on slot do yield slot;
+      coforall slot in slots do on slot do yield slot;
     }
 
     iter these(param order : Ordering = Ordering.NONE, param tag : iterKind, followThis) where tag == iterKind.follower {
@@ -637,8 +627,7 @@ module DistributedDeque {
     }
 
     proc ~DistributedDeque() {
-      var localThis = getPrivatizedThis;
-      for slot in localThis.slots do delete slot;
+      for slot in slots do delete slot;
     }
   }
 
