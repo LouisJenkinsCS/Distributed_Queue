@@ -50,12 +50,13 @@
   locality (see `distributedBagInitialBlockSize`). This data structure is unordered
   and employs its own work-stealing algorithm to balance work across nodes.
 
-  To use :record:`DistributedBag`, the :proc:`makeDistributedBag` factory method
-  must be invoked to properly initialize the structure.
+  To use :record:`DistributedBag`, the constructor must be invoked explicitly to 
+  properly initialize the structure. Using the default state without initializing
+  will result in a halt.
 
   .. code-block:: chapel
 
-    var bag = makeDistributedBag(int, targetLocales=Locales[0..1]);
+    var bag = new DistBag(int, targetLocales=Locales[0..1]);
 	
 	While usage of the `bag` can be used safely across locales, each locale has its own
 	instance allocated in it's address space, a `privatized` copy. While this instance
@@ -176,12 +177,16 @@ module DistributedBag {
 	
 		pragma "no doc"
     inline proc _value {
+      if _pid == -1 {
+        halt("DistBag is uninitialized...");
+      }
       return chpl_getPrivatizedCopy(DistributedBagImpl(eltType), _pid);
     }
 
-    forwarding chpl_getPrivatizedCopy(DistributedBagImpl(eltType), _pid);
+    forwarding _value;
   }
 
+  pragma "no doc"
   class DistributedBagImpl : Collection {
     pragma "no doc"
     var targetLocDom : domain(1);
@@ -225,6 +230,15 @@ module DistributedBag {
     pragma "no doc"
     inline proc getPrivatizedThis {
       return chpl_getPrivatizedCopy(this.type, pid);
+    }
+
+    pragma "no doc"
+    iter targetLocalesNotHere() {
+      for loc in targetLocales {
+        if loc != here {
+          yield loc;
+        }
+      }
     }
 
     /*
@@ -1027,7 +1041,7 @@ module DistributedBag {
                     segment.releaseStatus();
                     coforall segmentIdx in 0..#here.maxTaskPar {
                       var stolenWork : [{0..#numLocales}] (int, c_ptr(eltType));
-                      coforall loc in parentHandle.targetLocales {
+                      coforall loc in parentHandle.targetLocalesNotHere() {
                         if loc != here then on loc {
                           // As we jumped to the target node, 'localBag' returns
                           // the target's bag that we are attempting to steal from.
