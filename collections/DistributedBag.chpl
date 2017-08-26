@@ -68,10 +68,13 @@
 		
 	.. code-block:: chapel
 		
+    // All elements are added on this node...
 		forall elem in 1 .. 100 {
 			bag.add(elem);
 		}
+    // Elements redistributed across all nodes...
 		bag.balance();
+    
 */
 module DistributedBag {
   use Collection;
@@ -359,6 +362,13 @@ module DistributedBag {
       a severe imbalance, or when you have a smaller number of elements to balance.
       Furthermore, while this operation is parallel-safe, it should be called from at
       most one task.
+
+      **FIXME:** This method is extremely memory inefficient, and needs to be improved
+      to use a more-efficient way to transfer memory between segments. In particular,
+      redistributing data at global level, followed by local level would be best (as
+      in, make sure all nodes have an equal number of elements, and then each node ensures
+      its segments have an equal number of elements). This has result of not shifting all
+      excess elements to a single node (as it does now) to move it over.
     */
     proc balance() {
       var localThis = getPrivatizedThis;

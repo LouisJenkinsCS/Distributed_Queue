@@ -38,7 +38,71 @@
   this non-determinism is inherent in all lock-free and wait-free data structures.
 */
 
+/*
+  A parallel-safe scalable distributed deque. A deque is a double-ended queue that supports
+  insertion and removal from both ends of the queue, effectively supporting both
+  FIFO, LIFO, and a Total ordering, where the order in which you add them will be
+  the exact order you remove them in; for emphasis, a Deque can be used as a Queue,
+  a Stack, and a List respectively.
 
+  First, the :record:`DistDeque` must be initialized before use by calling its constructor.
+
+  .. code-blocks:: chapel
+    
+    var deque = new DistDeque(int, cap=maxElem, targetLocales=ourLocales);
+
+  The deque can be used as a queue by using the :proc:`enqueue` and :proc:`dequeue` convenience
+  methods or inserting from one end to remove from another...
+
+  .. code-blocks:: chapel
+
+    deque.enqueue(1);
+    var (hasElem, elem) = deque.dequeue();
+  
+  The deque can be used as a stack by using the :proc:`push` and :proc:`pop` convenience methods,
+  or insertion and removing from the same ends...
+
+  .. code-blocks:: chapel
+
+    deque.push(1);
+    var (hasElem, elem) = deque.pop();
+
+  The deque can be used as a list by using the :proc:`pushBack`, :proc:`pushFront`, :proc:`popBack`,
+  and :proc:`popFront` methods. While the deque is not indexable, the ability to `append` or `prepend`
+  is powerful enough to allow a total ordering, allowing the user to define the order by letting them
+  insert and remove at whichever ends they so choose.
+
+  .. code-blocks:: chapel
+    
+    var deque = new DistDeque(int);
+    forall i in 1 .. N {
+      if i % 2 == 0 then deque.pushFront(i);
+      else deque.pushBack(i);
+    }
+  
+  The deque supports both serial and parallel iteration, and a means to iterate in a particular order
+  (currently only FIFO and LIFO) using the `Ordering` enumerator.
+
+  .. code-blocks:: chapel
+
+    for elt in deque.these(Ordering.FIFO) {
+      // ...
+    }
+
+    for elt in deque.these(Ordering.LIFO) {
+      // ...
+    }
+
+  The deque can also be used in a reduction, although currently reduction only used parallel-iteration, hence
+  reduction will be performed in an unordered fashion. In the future, a specific function may be created to
+  allow reduction in a certain ordering...
+
+  .. code-blocks:: chapel
+
+    deque.addBulk(1..100);
+    var result = + reduce deque;
+    
+*/
 module DistributedDeque {
 
   use Collection;
@@ -402,7 +466,8 @@ module DistributedDeque {
       // We find our slot based on another fetch-add counter, making this wait-free as well.
       var tail = (globalTail.fetchSub(1) - 1) % nSlots;
       var elt = slots[abs(tail)].popBack();
-      return (true, elt);
+      var retval = (true, elt);
+      return retval;
     }
 
     /*
@@ -432,7 +497,8 @@ module DistributedDeque {
       // We find our slot based on another fetch-add counter, making this wait-free as well.
       var head = globalHead.fetchAdd(1) % nSlots;
       var elt = slots[abs(head)].popFront();
-      return (true, elt);
+      var retval = (true, elt);
+      return retval;
     }
 
     /*
@@ -464,6 +530,15 @@ module DistributedDeque {
       **FIXME:** Likely can be worked around by either using snapshot iteration approach
       or by making the lock reentrant and forcing all iterators to acquire all locks in
       some global locking order.
+
+      **FIXME:** Ordered serial iterators currently are not working well when the head or tail are negative
+      (because the head and tail may need to move backwards, its easily possible for it to be negative. We
+      handle this right now with the core methods, but iteration wasn't the focus during development...), 
+      but there is not enough time to fix it. This is an official warning against using anything but 
+      iteration when `order` == `Ordering.NONE` (A.K.A the default unordered iteration). 
+
+      **TODO:** Need to create a parallel iterator (not really parallel, just allowed to be used in a
+      `forall`) so that the user may attempt to perform a reduction in a specified order.
     */
     iter these(param order : Ordering = Ordering.NONE) : eltType where order == Ordering.NONE {
       for slot in slots {
@@ -505,7 +580,11 @@ module DistributedDeque {
       var nodes : [{0..#nSlots}] (int, int, LocalDequeNode(eltType));
       for i in 0 .. #nSlots {
         var node = slots[i].head;
-        nodes[i] = (node.size, node.headIdx, node);
+        if node == nil {
+          nodes[i] = (-1, -1, node);
+        } else {
+          nodes[i] = (node.size, node.headIdx, node);
+        }
       }
 
       // Iterate over captured head nodes; each time we read them we advance them
@@ -514,9 +593,9 @@ module DistributedDeque {
         if iterations == 0 then break;
         iterations -= 1;
 
-        var idx = i % nSlots;
+        var idx = abs(i % nSlots);
         var (size, headIdx, node) = nodes[idx];
-        if node == nil {
+        if node == nil || headIdx == -1 || size == -1 {
           halt("DistributedDeque Internal Error: Iterating over nil nodes, head: ", head, ", tail: ", tail, ", idx: ", i);
         }
         yield node.elements[headIdx];

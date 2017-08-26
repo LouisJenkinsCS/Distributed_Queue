@@ -157,7 +157,8 @@ coforall loc in Locales do on loc {
     barrier.barrier();
     var nSpins : int;
     while found.read() < totalSolutions {
-      var (exists, myBoard) = c.remove();
+      // BUG: If we do not specify the type here, we get a compiler internal error...
+      var (exists, myBoard) : (bool, boardType) = c.remove();
       // Spin: We haven't found solution yet...
       if !exists {
         nSpins = nSpins + 1;
