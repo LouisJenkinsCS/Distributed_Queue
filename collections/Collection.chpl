@@ -4,7 +4,7 @@
 
   1. Is safe parallel-safe, hence is safe to use across multiple tasks across multiple locales.
   2. Supports the basic operations that any data structure needs to be truly useful, that is:
-  
+
     a. Insertion of an arbitrary element. From this, we can insert bulk arbitrary elements.
     b. Removal of an arbitrary element. From this, we can remove bulk arbitrary elements.
     c. Iteration over all elements. From this, we can perform lookups over all elements.
@@ -72,11 +72,19 @@ module Collection {
       Otherwise, just make sure you always capture the return value inside of a loop
       in a variable not declared outside of loop...
 
-      ::
+      .. code-block:: chapel
 
         for i in 1 .. N {
           var retval = c.remove();
         }
+      
+      **BUG:** Sometimes the compiler will produce an internal error related to 'visibility blocks',
+      this can be resolved by declaring the return type rather than letting the compiler infer it.
+      The exact cause has yet to be found.
+
+      .. code-block:: chapel
+  
+        var retval : (bool, eltType) = c.remove();
 
     */
     proc remove() : (bool, eltType) {

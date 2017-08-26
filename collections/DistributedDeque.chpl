@@ -38,12 +38,26 @@
   this non-determinism is inherent in all lock-free and wait-free data structures.
 */
 
+
+
 /*
+
+  Summary
+  ________
+
+
   A parallel-safe scalable distributed deque. A deque is a double-ended queue that supports
   insertion and removal from both ends of the queue, effectively supporting both
   FIFO, LIFO, and a Total ordering, where the order in which you add them will be
   the exact order you remove them in; for emphasis, a Deque can be used as a Queue,
   a Stack, and a List respectively.
+
+  .. note::
+
+    The documentation for the Collection modules are being incrementally revised and improved.
+  
+  Usage
+  _____
 
   First, the :record:`DistDeque` must be initialized before use by calling its constructor.
 
@@ -81,7 +95,7 @@
     }
   
   The deque supports both serial and parallel iteration, and a means to iterate in a particular order
-  (currently only FIFO and LIFO) using the `Ordering` enumerator.
+  (currently only FIFO and LIFO) using the ``Ordering`` enumerator.
 
   .. code-block:: chapel
 
@@ -101,7 +115,35 @@
 
     deque.addBulk(1..100);
     var result = + reduce deque;
-    
+  
+  Bugs and Known Issues
+  _____________________
+
+  1.  It is not safe to call other methods while iterating, as it will lead to deadlock. It is an open question
+      whether using a snapshot approach is better to allow concurrent operations at the expense of elevated memory
+      consumption, and iterating directly over elements while holding locks, which strangles potential concurrency.
+  
+  2.  Reduction cannot be performed in any ordered way. This may be fixed in the near future, either by adding
+      pseudo-parallel iterators that merely yield sequentially in order, or by creating a method to perform reduction
+      for the user in a specified ordering.
+  
+  3.  This data structure **requires** network atomic support for scalability, and without it will result in degrading
+      performance. It is another open question whether a specific implementation that is more friendly for remote-execution
+      atomic operations should be provided. 
+
+  4.  The ordered serial iterators currently do not work when the ``globalHead`` or ``globalTail`` are negative, which is a
+      result of iteration being an after-thought. This will be improved upon soon, but for now if you use :proc:`pushBack`
+      or :proc:`pushFront` methods, I would advise against using them for now.
+
+  Planned Improvements
+  ____________________
+
+  1.  Double the size of each successor up to some maximmum, similar to :mod:`DistributedBag` for unroll blocks.
+      Currently they are fixed-sized, but it can benefit from improved locality if a lot of elements are added at
+      once.
+
+  Methods
+  _______
 */
 module DistributedDeque {
 
@@ -114,7 +156,7 @@ module DistributedDeque {
   config param distributedDequeBlockSize = 8;
 
   /*
-    The ordering used for serial iteration. NONE, the default, is the most performant
+    The ordering used for serial iteration. ``NONE``, the default, is the most performant
     and is algorithmically similar to parallel iteration.
   */
   enum Ordering {
@@ -144,6 +186,11 @@ module DistributedDeque {
   */
   record DistDeque {
     type eltType;
+    /*
+      The implementation of the Deque, is forwarded. See :class:`DistributedDequeImpl` for
+      documentation.
+    */
+    var _impl : DistributedDequeImpl(eltType);
 
     // Privatization id
     pragma "no doc"
@@ -157,6 +204,7 @@ module DistributedDeque {
       _rc = new Shared(new DistributedDequeRC(eltType, _pid = _pid));
     }
 
+    pragma "no doc"
     inline proc _value {
       if _pid == -1 {
         halt("DistDeque is uninitialized...");
@@ -175,6 +223,9 @@ module DistributedDeque {
         __primitive("method call resolves", _value, "these", tag=tag)
       return _value.these(order, tag=tag);
 
+    /*
+      See :class:`DistributedDequeImpl`.
+    */
     forwarding _value;
   }
 
@@ -190,12 +241,6 @@ module DistributedDeque {
     forwarding _value;
   }
 
-  /*
-    A parallel-safe scalable distributed double-ended queue that supports both
-    insertion and removal from either end of the queue. Can be used as a Queue,
-    Stack, or even a List.
-  */
-  pragma "no doc"
   class DistributedDequeImpl : CollectionImpl {
     /*
       Capacity, the maximum number of elements a Deque can hold. A `cap` of -1 is
@@ -523,9 +568,8 @@ module DistributedDeque {
 
     /*
       Iterate over all elements in the deque in the order specified.
-
-      **Warning:** Calling other methods while inside of an iterator is not safe as
-      it will likely lead to deadlock.
+      
+      
 
       **FIXME:** Likely can be worked around by either using snapshot iteration approach
       or by making the lock reentrant and forcing all iterators to acquire all locks in
@@ -718,6 +762,7 @@ module DistributedDeque {
       followThis.lock$;
     }
 
+    pragma "no doc"
     proc Destroy() {
       for slot in slots do delete slot;
       delete globalHead;

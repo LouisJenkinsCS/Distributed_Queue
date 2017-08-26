@@ -44,6 +44,10 @@
 */
 
 /*
+
+  Summary
+  _______
+
   A parallel-safe distributed multiset implementation that scales in terms of
   nodes, processors per node (PPN), and workload; The more PPN, the more segments
   we allocate to increase raw parallelism, and the larger the workload the better
@@ -57,7 +61,7 @@
   .. code-block:: chapel
 
     var bag = new DistBag(int, targetLocales=Locales[0..1]);
-	
+
 	While usage of the `bag` can be used safely across locales, each locale has its own
 	instance allocated in it's address space, a `privatized` copy. While this instance
 	is managed transparently from the user, its impact on performance is significant.
@@ -74,8 +78,9 @@
 		}
     // Elements redistributed across all nodes...
 		bag.balance();
-    
+
 */
+
 module DistributedBag {
   use Collection;
   use BlockDist;
