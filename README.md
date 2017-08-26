@@ -14,70 +14,46 @@ cluster), and a way to learn more exciting and useful knowledge. As well, I woul
 mentors, [**@e-kayrakli**](https://github.com/e-kayrakli) and [**@mppf**](https://github.com/mppf), who I 
 have had the honor to server under. Finally, I would like to thank the Chapel project itself.
 
-### Pull Requests & Discussions
+### Issues, Pull Requests & Discussions
 
-Below I will list all Pull Requests. Not all are guaranteed to be merged at the time of this posting.
+For documentation purposes, I will list the most important information that should be taken into account for GSoC
+final evaluations.
 
-#### GlobalAtomicObject
+#### Issues Honorable Mentions
 
-[Discussion](https://github.com/chapel-lang/chapel/issues/6663) **(On Hold)**
+While I have had many issues with Chapel's compiler so far, I will only list the ones that are relatively significant.
 
-[Pull Request](https://github.com/chapel-lang/chapel/pull/6717) **(Closed)**
+1.	LICM (Loop-Invariant-Code-Motion), a compiler optimization, causes tuples to cause undefined behavior due to improper
+	hoisting. This issue has caused me a large amount of grief and countless hours (estimated to cause me to lose a week
+	of development time), and it deserves to be mentioned first. All-in-all I am glad it was caught while developing and
+	not, say, for a unsuspecting user. [Link](https://github.com/chapel-lang/chapel/issues/7003).
+2.	Code generation phase inaccurately performed comparison directly on references. In the compiler, references are actually
+	pointers, and so during comparison it would compare it by pointer to something else. Now if you were to perform this
+	comparison, it could lead to code inaccurately taking branches of code it was not meant to. This only caused me to lose
+	a day. [Link](https://github.com/chapel-lang/chapel/pull/7065).
+3.	Returning a tuple from an overloaded method, which would result in dynamically dispatching the method at runtime, would
+	cause the compiler to crash if not captured at the callsite. This is no normal internal error, where you get a decent 
+	error message and a line number, this resulted in an actual segmentation fault during compilation. Currently, this bug 
+	is still not patched and a careless user can trigger it by not capturing the return value of `remove`. This caused me
+	to lose a weekend of development time. [Link](https://github.com/chapel-lang/chapel/issues/6542).
 
-Currently, the `GlobalAtomicObject` is an actual solution to a very big problem in distributed computing.
-Atomic operations on remote memory is a very tricky topic. There are multiple approaches, but as HPC demands
-high performance above all else, the number of valid choices dwindle to next to nothing. While specialized
-hardware may be developed in the future, I sought to develop a software solution that works in the here-and-now.
-However, to understand the actual problem, some background knowledge is required.
+#### GlobalAtomicObject - Spin-Off Project
 
-##### Remote Atomic Operations
+A spin-off project that was created from the desire to solve a core problem to creating scalable data structures:
+performing atomic operations on class instances. It has played an important role in experimentation, and it would
+be invaluable as a tool to create more scalable distributed data structures, and is useful even for any arbitrary
+application. This sub-project could not be completed as it would require some Chapel runtime and compiler changes
+to make it work more efficiently, but even now it proves to be a scalable solution, and as such deserves to be
+mentioned here. There will be more improvements made on this, as it will become my next (unfortunately non-funded)
+project, as it will be another first and novel solution.
 
-As a PGAS (Partitioned Global Address Space) language, Chapel allows operations on memory to be transparent 
-with respect to which node the memory is allocated on. Hence, if you can perform atomic operations on local
-memory, you can make them on remote memory too. There are two ways in which these atomic operations are handled: 
+[Discussion](https://github.com/chapel-lang/chapel/issues/6663) - Is currently on hold as the GSoC project is unfinished
+and is over larger priority.
 
-1) **Remote Execution Atomic Operations**
+[Pull Request](https://github.com/chapel-lang/chapel/pull/6717) - Currently is closed as this requires a lot more work.
 
-	This is the most naive, but it is performed when nodes lack NICs like Aries which support network atomics
-	at a hardware level, and is most commonly used when applications run locally. For example, imagine if the
-	user were want to perform a 'wait-free' atomic operation, such as `fetchAdd` on some remote memory location.
-	Without a NIC supporting network atomics, it boils down to the below...
-
-	```chpl
-	var _value : atomic int;
-	on _value do _value.fetchAdd(1);
-	```
-
-	In this case, while it is technically wait-free as it is technically bounded by network latency, it must spawn 
-	a remote task on the target node, and causes the current task to block until it returns. This is performed implicitly, but the performance penalty is severe enough to bottleneck any application. Furthermore, spawning a remote task deprives the target node of valuable resources, and as such results in degrading performance.
-
-2) **Network Atomic Operations**
-
-	This requires very specific hardware, such as the Aries NIC, which is Cray proprietary hardware and top-of-the-line.
-	This is required for scalable (or even acceptable) performance for ordered data structures. Using the same example
-	as before, a `fetchAdd` in this case is 'wait-free' enough to allow scalable performance. Scalable performance can
-	only be achieved via an algorithm that is also bounded in terms of 'retry' operations, which rules out certain synchronization
-	patterns, such as the lock-free 'CAS Retry loop' where the cost of retrying is too expensive, hence ruling out any lock-free
-	algorithms and methodologies.
-
-##### Atomic Operations on 'Wide' Pointers
-
-As memory can be accessed transparently from the user's perspective, it must be kept track of by the runtime. Hence, to determine
-which node the memory belongs to, the pointer is 'widened' into a 128-bit value which keeps track of both the memory address and
-node id. The next issue is that majority of hardware do not support 128-bit network atomic operations, even the Aries NIC. With
-the second approach (above) ruled out in terms of a lack of hardware support, this only allows the first approach. However, as mentioned
-before, this leads to degrading performance as such is not feasible as an actual solution.
-
-One approach to solve the problem using the second approach is to use a technique called 'pointer compression', which takes advantage of
-the fact that operating systems only makes use of the first 48 bits of the virtual address space, allowing the most significant 16 bits
-to store the node id. This approach works very well for clusters with less than 2^16 nodes, but is a short-term solution and not fitting
-for a language that prides itself on portability. 
-
-My approach aims to solve the problem for any number of nodes. In my solution, I used descriptors to denote objects by id, and a table
-to store said objects (the descrirptor being the index into the table). This way, we may use the second approach by 
-performing the atomic operations using 64-bit descriptors. This approach, while scalable, is magnitudes slower than 'pointer compression' but will work for up 2^32 nodes. Furtermore, a more practical solution, involving the Chapel runtime, is planned to
-significantly improve performance.
-
+[Repository](https://github.com/LouisJenkinsCS/Chapel-Atomic-Objects) - It has been moved to its own repository and stripped
+from this project.
 
 #### Collections Module
 
@@ -128,7 +104,7 @@ SynchronizedList | 1x
 DistributedDeque | 63x
 DistributedBag | 403x
 
-![](Results/Collections_Add.png)
+![](results/Collections_Add.png)
 
 #### Remove
 
@@ -138,4 +114,4 @@ SynchronizedList | 1x
 DistributedDeque | 123x
 DistributedBag | 651x
 
-![](Results/Collections_Remove.png)
+![](results/Collections_Remove.png)
