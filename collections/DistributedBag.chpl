@@ -143,6 +143,11 @@ module DistributedBag {
     others and should not be stolen from.
   */
   config const distributedBagWorkStealingMinElems = 1;
+  /*
+    The maximum amount of elements in an unroll block. This is crucial to ensure memory
+    usage does not rapidly grow out of control.
+  */
+  config const distributedBagMaxBlockSize = 1024 * 1024;
 
   /*
     Reference counter for DistributedBag
@@ -729,7 +734,7 @@ module DistributedBag {
 
         // Full? Create a new one double the previous size
         if block.isFull {
-          block.next = new BagSegmentBlock(eltType, block.cap * 2);
+          block.next = new BagSegmentBlock(eltType, min(distributedBagMaxBlockSize, block.cap * 2));
           tailBlock = block.next;
           block = block.next;
         }
@@ -812,7 +817,7 @@ module DistributedBag {
 
       // Full? Create a new one double the previous size
       if block.isFull {
-        block.next = new BagSegmentBlock(eltType, block.cap * 2);
+        block.next = new BagSegmentBlock(eltType, min(distributedBagMaxBlockSize, block.cap * 2));
         tailBlock = block.next;
         block = block.next;
       }
