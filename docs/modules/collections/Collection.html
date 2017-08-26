@@ -198,9 +198,15 @@ variable declared outside of loop. Issue: #7003</p>
 <p><strong>FIX:</strong> Use the <cite>&#8211;no-loop-invariant-code-motion</cite> to disable LICM.
 Otherwise, just make sure you always capture the return value inside of a loop
 in a variable not declared outside of loop...</p>
-<div class="highlight-python"><div class="highlight"><pre><span></span>for i in 1 .. N {
-  var retval = c.remove();
-}
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="nx">i</span> <span class="kd">in</span> <span class="mi">1</span> <span class="o">..</span> <span class="nx">N</span> <span class="p">{</span>
+  <span class="kd">var</span> <span class="nx">retval</span> <span class="o">=</span> <span class="nx">c</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>BUG:</strong> Sometimes the compiler will produce an internal error related to &#8216;visibility blocks&#8217;,
+this can be resolved by declaring the return type rather than letting the compiler infer it.
+The exact cause has yet to be found.</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="kd">var</span> <span class="nx">retval</span> <span class="p">:</span> <span class="p">(</span><span class="kt">bool</span><span class="p">,</span> <span class="nx">eltType</span><span class="p">)</span> <span class="o">=</span> <span class="nx">c</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
 </pre></div>
 </div>
 </dd></dl>

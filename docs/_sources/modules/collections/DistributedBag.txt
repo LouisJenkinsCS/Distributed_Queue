@@ -1,7 +1,7 @@
 .. default-domain:: chpl
 
 .. module:: DistributedBag
-   :synopsis: A parallel-safe distributed multiset implementation that scales in terms of
+   :synopsis: Summary
 
 DistributedBag
 ==============
@@ -11,6 +11,10 @@ DistributedBag
 
    use DistributedBag;
 
+
+
+ Summary
+ _______
 
  A parallel-safe distributed multiset implementation that scales in terms of
  nodes, processors per node (PPN), and workload; The more PPN, the more segments
@@ -42,7 +46,7 @@ because initializing the structure from one node is appealing, the user may use 
 	}
    // Elements redistributed across all nodes...
 	bag.balance();
-   
+
 
 .. data:: config const distributedBagInitialBlockSize = 1024
 
