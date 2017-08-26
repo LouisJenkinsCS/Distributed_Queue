@@ -144,7 +144,7 @@ _______
    .. attribute:: var _impl: DistributedDequeImpl(eltType)
 
       
-      The implementation of the Deque, is forwarded. See :class:`DistributedDequeImpl` for
+      The implementation of the Deque is forwarded. See :class:`DistributedDequeImpl` for
       documentation.
       
 

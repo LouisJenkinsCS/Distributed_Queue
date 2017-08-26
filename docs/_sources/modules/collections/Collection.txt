@@ -1,7 +1,7 @@
 .. default-domain:: chpl
 
 .. module:: Collection
-   :synopsis: A 'Collection' is an interface for a data structure that is a 'contract' between
+   :synopsis: Summary
 
 Collection
 ==========
@@ -11,6 +11,10 @@ Collection
 
    use Collection;
 
+
+
+Summary
+_______
 
 A 'Collection' is an interface for a data structure that is a 'contract' between
 the user and implementer that it fulfills the following:
@@ -26,6 +30,10 @@ From the standpoint of the user, who directly benefits, they obtain a very nice 
 guarantee on the object they are using, and from the implementor's view, they get to the
 benefit from both implementing a well-design interface, and from getting some utility methods 
 'for-free'.
+
+.. note::
+
+  The documentation for the Collection modules are being incrementally revised and improved.
 
 .. class:: CollectionImpl
 
