@@ -57,15 +57,31 @@ from this project.
 
 #### Collections Module
 
-[Discussion](https://github.com/chapel-lang/chapel/issues/6812) **Finished**
+The 'Collections' module is an attempt to bring Java-like data structures to distributed computing. Prior to this module, the
+only available data structure was the `List`, a singly-linked list that offered no parallel-safety nor took advantage of distributing
+memory across nodes. The pattern before Collection was to create your own distributed data structures, specific to your own needs.
+While this makes sense for raw performance, the core focus of Chapel is to bring abstraction and make it easier to make distributed
+data structures; tie on the fact that, while I'm not trying to exaggerate my achievements but, making distributed data structures is
+hard. With abstraction comes a lack of control, as many fine-grained communications are made implicitly betwen nodes without realizing,
+easily degrading performance when not needed. Developing these data structures is also time consuming, and developing them each time will
+detract from the time needed to create appplication software.
 
-[Pull Request](https://github.com/chapel-lang/chapel/pull/7062) **Merged**
+Not only have I created two excellent data structures, they both make use of low-level techniques that the user should avoid, such as
+privatization (allocating a clone on each node that is used to prevent excess implicit communications caused by accessing class fields).
+Furthermore, not only do my data structures perform well, they are also very useful, as they offer abstractions people may commonly
+require, such as iteration, reductions, utility methods, etc. Lastly, the Collections module offers something that was also lacking: an
+interface. Currently Chapel does not support interfaces ([yet...](https://github.com/chapel-lang/chapel/blob/master/doc/rst/developer/chips/2.rst#interface-declarations)), and this will be the first. We provide a contract between the user and developer that a certain
+object will support insertion, removal, and iteration, with lookup, bulk insertion, and bulk removal being added for 'free'. This allows
+the user to reliably use any Collection, and it allows developers who do not to implement specialized versions of the 'for free' methods.
 
-This is the initial pull request, which was officially merged to run under nightly testing.
+[Discussion](https://github.com/chapel-lang/chapel/issues/6812) - The original discussions for the Collections module.
+
+[Pull Request](https://github.com/chapel-lang/chapel/pull/7062) - The initial PR that was merged upstream. Needed to perform nightly
+testing.
 
 ## Performance Testing
 
-All benchmarks performed on a Cray-XC40 cluster.
+All benchmarks performed on a Cray-XC40 cluster, at 64-nodes, with Intel Broadwell processors.
 
 ## Deque
 
@@ -84,11 +100,6 @@ number of cores per node, we offer a multiset implementation, called a 'Bag',
 which is a medium that allows storing and retrieving data in any arbitrary order.
 This type of data structure is ideal for work queues as it employs it's own load
 balancing, and offers unparalleled performance.
-
-**Disclaimer:** A node can request a 'privatized' copy, which retrieves a clone
-that is allocated on the node requesting it, reducing any excess communication.
-Usage of `getPrivatizedInstance()` is highly advised for performance-critical
-sections.
 
 ### Performance
 
