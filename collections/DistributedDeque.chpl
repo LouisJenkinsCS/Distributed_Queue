@@ -47,14 +47,14 @@
 
   First, the :record:`DistDeque` must be initialized before use by calling its constructor.
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
     
     var deque = new DistDeque(int, cap=maxElem, targetLocales=ourLocales);
 
   The deque can be used as a queue by using the :proc:`enqueue` and :proc:`dequeue` convenience
   methods or inserting from one end to remove from another...
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
 
     deque.enqueue(1);
     var (hasElem, elem) = deque.dequeue();
@@ -62,7 +62,7 @@
   The deque can be used as a stack by using the :proc:`push` and :proc:`pop` convenience methods,
   or insertion and removing from the same ends...
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
 
     deque.push(1);
     var (hasElem, elem) = deque.pop();
@@ -72,7 +72,7 @@
   is powerful enough to allow a total ordering, allowing the user to define the order by letting them
   insert and remove at whichever ends they so choose.
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
     
     var deque = new DistDeque(int);
     forall i in 1 .. N {
@@ -83,7 +83,7 @@
   The deque supports both serial and parallel iteration, and a means to iterate in a particular order
   (currently only FIFO and LIFO) using the `Ordering` enumerator.
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
 
     for elt in deque.these(Ordering.FIFO) {
       // ...
@@ -97,7 +97,7 @@
   reduction will be performed in an unordered fashion. In the future, a specific function may be created to
   allow reduction in a certain ordering...
 
-  .. code-blocks:: chapel
+  .. code-block:: chapel
 
     deque.addBulk(1..100);
     var result = + reduce deque;

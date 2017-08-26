@@ -138,26 +138,54 @@
 <div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">use</span> <span class="nx">Collection</span><span class="p">;</span>
 </pre></div>
 </div>
+<p>A &#8216;Collection&#8217; is an interface for a data structure that is a &#8216;contract&#8217; between
+the user and implementer that it fulfills the following:</p>
+<ol class="arabic simple">
+<li>Is safe parallel-safe, hence is safe to use across multiple tasks across multiple locales.</li>
+<li>Supports the basic operations that any data structure needs to be truly useful, that is:</li>
+</ol>
+<blockquote>
+<div><ol class="loweralpha simple">
+<li>Insertion of an arbitrary element. From this, we can insert bulk arbitrary elements.</li>
+<li>Removal of an arbitrary element. From this, we can remove bulk arbitrary elements.</li>
+<li>Iteration over all elements. From this, we can perform lookups over all elements.</li>
+</ol>
+</div></blockquote>
+<p>From the standpoint of the user, who directly benefits, they obtain a very nice but minimal
+guarantee on the object they are using, and from the implementor&#8217;s view, they get to the
+benefit from both implementing a well-design interface, and from getting some utility methods
+&#8216;for-free&#8217;.</p>
 <dl class="class">
-<dt id="Collection.Collection">
-<em class="property">class </em><code class="descname">Collection</code><a class="headerlink" href="#Collection.Collection" title="Permalink to this definition">¶</a></dt>
-<dd><p>A &#8216;Collection&#8217; is a data structure, a container for elements that provide support
-for insert, lookup, remove, and iteration operations.</p>
-<dl class="attribute">
-<dt id="Collection.Collection.eltType">
-<em class="property">type </em><code class="descname">eltType</code><a class="headerlink" href="#Collection.Collection.eltType" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl">
+<em class="property">class </em><code class="descname">CollectionImpl</code><a class="headerlink" href="#Collection.CollectionImpl" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="attribute">
+<dt id="Collection.CollectionImpl.eltType">
+<em class="property">type </em><code class="descname">eltType</code><a class="headerlink" href="#Collection.CollectionImpl.eltType" title="Permalink to this definition">¶</a></dt>
 <dd><p>The type of element that this Collection holds.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.add">
-<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.add" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.add">
+<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.CollectionImpl.add" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adds an element to this data structure.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.remove">
-<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#Collection.Collection.remove" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.addBulk">
+<em class="property">proc </em><code class="descname">addBulk</code><span class="sig-paren">(</span><em>elts</em><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.CollectionImpl.addBulk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add all elements in bulk to this data structure. If the data structure
+rejects an element, we cease to offer more. We return the number of elements
+successfully added to this data structure.</p>
+<p><strong>Warning:</strong> While this method will add as many items as possible, it will <cite>break</cite>
+when it is unable to consume more elements. Due to the fact that using <cite>break</cite> in
+an iterator will cause a memory leak and potentially leave this data structure in
+a undefined state, this should not be used to append another data structure to a
+bounded structure unless it is known it will succeed.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="Collection.CollectionImpl.remove">
+<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#Collection.CollectionImpl.remove" title="Permalink to this definition">¶</a></dt>
 <dd><p>Removes an arbitrary element from this data structure.</p>
 <p><strong>BUG:</strong> Compiler will segfault if the returned value is not captured at callsite.
 Issue: #6542</p>
@@ -178,46 +206,54 @@ in a variable not declared outside of loop...</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.contains">
-<em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.contains" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.removeBulk">
+<em class="property">proc </em><code class="descname">removeBulk</code><span class="sig-paren">(</span><em>nElts: int</em><span class="sig-paren">)</span><a class="headerlink" href="#Collection.CollectionImpl.removeBulk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes <cite>nElts</cite> elements from this data structure, returning them as an array.
+If the data structure fails to produce a new element, we cease and shrink the array
+to its appropriate size and return that.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="Collection.CollectionImpl.contains">
+<em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.CollectionImpl.contains" title="Permalink to this definition">¶</a></dt>
 <dd><p>Determine whether an element exists in this collection.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.clear">
-<em class="property">proc </em><code class="descname">clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#Collection.Collection.clear" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.clear">
+<em class="property">proc </em><code class="descname">clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#Collection.CollectionImpl.clear" title="Permalink to this definition">¶</a></dt>
 <dd><p>Clears all elements in this collection.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.isEmpty">
-<em class="property">proc </em><code class="descname">isEmpty</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.Collection.isEmpty" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.isEmpty">
+<em class="property">proc </em><code class="descname">isEmpty</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: bool<a class="headerlink" href="#Collection.CollectionImpl.isEmpty" title="Permalink to this definition">¶</a></dt>
 <dd><p>Check if this data structure is empty.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.length">
-<em class="property">proc </em><code class="descname">length</code>: int<a class="headerlink" href="#Collection.Collection.length" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.length">
+<em class="property">proc </em><code class="descname">length</code>: int<a class="headerlink" href="#Collection.CollectionImpl.length" title="Permalink to this definition">¶</a></dt>
 <dd><p>Syntactic sugar for <cite>getSize</cite>.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.size">
-<em class="property">proc </em><code class="descname">size</code>: int<a class="headerlink" href="#Collection.Collection.size" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.size">
+<em class="property">proc </em><code class="descname">size</code>: int<a class="headerlink" href="#Collection.CollectionImpl.size" title="Permalink to this definition">¶</a></dt>
 <dd><p>Syntactic sugar for <cite>getSize</cite>.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="Collection.Collection.getSize">
-<em class="property">proc </em><code class="descname">getSize</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.Collection.getSize" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.getSize">
+<em class="property">proc </em><code class="descname">getSize</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#Collection.CollectionImpl.getSize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Obtain the number of elements contained in this collection.</p>
 </dd></dl>
 
 <dl class="itermethod">
-<dt id="Collection.Collection.these">
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#Collection.Collection.these" title="Permalink to this definition">¶</a></dt>
+<dt id="Collection.CollectionImpl.these">
+<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#Collection.CollectionImpl.these" title="Permalink to this definition">¶</a></dt>
 <dd><p>Iterate over all elements in the data structure.</p>
-<p><strong>BUG:</strong> Compiler does not currently allow overloading standalone or leader/follower
+<p><strong>BUG:</strong> Compiler does not currently allow overriding standalone or leader/follower
 iterators, and as such only serial iterators may be used with the base type. See
 issue #6998</p>
 <p><strong>BUG:</strong> Resources are not properly cleaned up when the user breaks or returns
@@ -228,7 +264,7 @@ from a serial iterator, and so this <em>must</em> be avoided at all cost. See is
 
 <dl class="function">
 <dt>
-<code class="descname">proc +=(ref c: Collection(?eltType), elt: eltType)</code></dt>
+<code class="descname">proc +=(ref c: CollectionImpl(?eltType), elt: eltType)</code></dt>
 <dd><p>Syntactic sugar for &#8216;add&#8217;.</p>
 <p><strong>BUG:</strong> Compiler produces a warning that <cite>c</cite> should be a <cite>ref</cite>, when it is not needed
 because it is a class and can be used by value. Need a pragma to disable this?

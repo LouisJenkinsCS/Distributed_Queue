@@ -4,6 +4,7 @@
 
   1. Is safe parallel-safe, hence is safe to use across multiple tasks across multiple locales.
   2. Supports the basic operations that any data structure needs to be truly useful, that is:
+  
     a. Insertion of an arbitrary element. From this, we can insert bulk arbitrary elements.
     b. Removal of an arbitrary element. From this, we can remove bulk arbitrary elements.
     c. Iteration over all elements. From this, we can perform lookups over all elements.

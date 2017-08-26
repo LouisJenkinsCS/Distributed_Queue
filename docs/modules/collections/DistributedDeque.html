@@ -137,6 +137,56 @@
 <div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">use</span> <span class="nx">DistributedDeque</span><span class="p">;</span>
 </pre></div>
 </div>
+<p>A parallel-safe scalable distributed deque. A deque is a double-ended queue that supports
+insertion and removal from both ends of the queue, effectively supporting both
+FIFO, LIFO, and a Total ordering, where the order in which you add them will be
+the exact order you remove them in; for emphasis, a Deque can be used as a Queue,
+a Stack, and a List respectively.</p>
+<p>First, the <a class="reference internal" href="#DistributedDeque.DistDeque" title="DistributedDeque.DistDeque"><code class="xref chpl chpl-record docutils literal"><span class="pre">DistDeque</span></code></a> must be initialized before use by calling its constructor.</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="kd">var</span> <span class="nx">deque</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">DistDeque</span><span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="nx">cap</span><span class="o">=</span><span class="nx">maxElem</span><span class="p">,</span> <span class="nx">targetLocales</span><span class="o">=</span><span class="nx">ourLocales</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The deque can be used as a queue by using the <code class="xref chpl chpl-proc docutils literal"><span class="pre">enqueue</span></code> and <code class="xref chpl chpl-proc docutils literal"><span class="pre">dequeue</span></code> convenience
+methods or inserting from one end to remove from another...</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="nx">deque</span><span class="p">.</span><span class="nx">enqueue</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="kd">var</span> <span class="p">(</span><span class="nx">hasElem</span><span class="p">,</span> <span class="nx">elem</span><span class="p">)</span> <span class="o">=</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">dequeue</span><span class="p">();</span>
+</pre></div>
+</div>
+<p>The deque can be used as a stack by using the <code class="xref chpl chpl-proc docutils literal"><span class="pre">push</span></code> and <code class="xref chpl chpl-proc docutils literal"><span class="pre">pop</span></code> convenience methods,
+or insertion and removing from the same ends...</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="nx">deque</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="kd">var</span> <span class="p">(</span><span class="nx">hasElem</span><span class="p">,</span> <span class="nx">elem</span><span class="p">)</span> <span class="o">=</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">pop</span><span class="p">();</span>
+</pre></div>
+</div>
+<p>The deque can be used as a list by using the <code class="xref chpl chpl-proc docutils literal"><span class="pre">pushBack</span></code>, <code class="xref chpl chpl-proc docutils literal"><span class="pre">pushFront</span></code>, <code class="xref chpl chpl-proc docutils literal"><span class="pre">popBack</span></code>,
+and <code class="xref chpl chpl-proc docutils literal"><span class="pre">popFront</span></code> methods. While the deque is not indexable, the ability to <cite>append</cite> or <cite>prepend</cite>
+is powerful enough to allow a total ordering, allowing the user to define the order by letting them
+insert and remove at whichever ends they so choose.</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="kd">var</span> <span class="nx">deque</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">DistDeque</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+<span class="k">forall</span> <span class="nx">i</span> <span class="kd">in</span> <span class="mi">1</span> <span class="o">..</span> <span class="nx">N</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="nx">i</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">then</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">pushFront</span><span class="p">(</span><span class="nx">i</span><span class="p">);</span>
+  <span class="k">else</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">pushBack</span><span class="p">(</span><span class="nx">i</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The deque supports both serial and parallel iteration, and a means to iterate in a particular order
+(currently only FIFO and LIFO) using the <cite>Ordering</cite> enumerator.</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="nx">elt</span> <span class="kd">in</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">these</span><span class="p">(</span><span class="nx">Ordering</span><span class="p">.</span><span class="nx">FIFO</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+<span class="p">}</span>
+
+<span class="k">for</span> <span class="nx">elt</span> <span class="kd">in</span> <span class="nx">deque</span><span class="p">.</span><span class="nx">these</span><span class="p">(</span><span class="nx">Ordering</span><span class="p">.</span><span class="nx">LIFO</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The deque can also be used in a reduction, although currently reduction only used parallel-iteration, hence
+reduction will be performed in an unordered fashion. In the future, a specific function may be created to
+allow reduction in a certain ordering...</p>
+<div class="highlight-chapel"><div class="highlight"><pre><span></span><span class="nx">deque</span><span class="p">.</span><span class="nx">addBulk</span><span class="p">(</span><span class="mi">1</span><span class="o">..</span><span class="mi">100</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="o">+</span> <span class="k">reduce</span> <span class="nx">deque</span><span class="p">;</span>
+</pre></div>
+</div>
 <dl class="data">
 <dt id="DistributedDeque.distributedDequeBlockSize">
 <em class="property">config param </em><code class="descname">distributedDequeBlockSize</code> = 8<a class="headerlink" href="#DistributedDeque.distributedDequeBlockSize" title="Permalink to this definition">¶</a></dt>
@@ -150,136 +200,30 @@
 and is algorithmically similar to parallel iteration.</p>
 </dd></dl>
 
-<dl class="class">
-<dt id="DistributedDeque.DistributedDeque">
-<em class="property">class </em><code class="descname">DistributedDeque</code>: Collection<a class="headerlink" href="#DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
+<dl class="record">
+<dt id="DistributedDeque.DistDeque">
+<em class="property">record </em><code class="descname">DistDeque</code><a class="headerlink" href="#DistributedDeque.DistDeque" title="Permalink to this definition">¶</a></dt>
 <dd><p>A parallel-safe scalable distributed double-ended queue that supports both
 insertion and removal from either end of the queue. Can be used as a Queue,
 Stack, or even a List.</p>
 <dl class="attribute">
-<dt id="DistributedDeque.DistributedDeque.cap">
-<em class="property">var </em><code class="descname">cap</code>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.cap" title="Permalink to this definition">¶</a></dt>
-<dd><p>Capacity, the maximum number of elements a Deque can hold. A <cite>cap</cite> of -1 is
-considered unbounded.</p>
-</dd></dl>
-
-<dl class="attribute">
-<dt id="DistributedDeque.DistributedDeque.targetLocales">
-<em class="property">var </em><code class="descname">targetLocales</code>: [targetLocDom] locale<a class="headerlink" href="#DistributedDeque.DistributedDeque.targetLocales" title="Permalink to this definition">¶</a></dt>
-<dd><p>Locales to distribute the <cite>Deque</cite> across.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.DistributedDeque">
-<em class="property">proc </em><code class="descname">DistributedDeque</code><span class="sig-paren">(</span><em>type eltType</em>, <em>cap: int = -1</em>, <em>targetLocales: [?locDom] locale = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.DistributedDeque" title="Permalink to this definition">¶</a></dt>
+<dt id="DistributedDeque.DistDeque.eltType">
+<em class="property">type </em><code class="descname">eltType</code><a class="headerlink" href="#DistributedDeque.DistDeque.eltType" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
-<dt id="DistributedDeque.DistributedDeque.add">
-<em class="property">proc </em><code class="descname">add</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.add" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.remove">
-<em class="property">proc </em><code class="descname">remove</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.remove" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>popFront</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.enqueue">
-<em class="property">proc </em><code class="descname">enqueue</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.enqueue" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.dequeue">
-<em class="property">proc </em><code class="descname">dequeue</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.dequeue" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>popFront</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.push">
-<em class="property">proc </em><code class="descname">push</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.push" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>pushBack</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.pop">
-<em class="property">proc </em><code class="descname">pop</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.pop" title="Permalink to this definition">¶</a></dt>
-<dd><p>Syntactic sugar for <cite>popBack</cite>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.pushBack">
-<em class="property">proc </em><code class="descname">pushBack</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.pushBack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Appends the element to the tail.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.popBack">
-<em class="property">proc </em><code class="descname">popBack</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.popBack" title="Permalink to this definition">¶</a></dt>
-<dd><p>Removes the element at the tail.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.pushFront">
-<em class="property">proc </em><code class="descname">pushFront</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.pushFront" title="Permalink to this definition">¶</a></dt>
-<dd><p>Appends the element to the head.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.popFront">
-<em class="property">proc </em><code class="descname">popFront</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: (bool, eltType)<a class="headerlink" href="#DistributedDeque.DistributedDeque.popFront" title="Permalink to this definition">¶</a></dt>
-<dd><p>Removes the element at the head.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.getSize">
-<em class="property">proc </em><code class="descname">getSize</code><span class="sig-paren">(</span><span class="sig-paren">)</span>: int<a class="headerlink" href="#DistributedDeque.DistributedDeque.getSize" title="Permalink to this definition">¶</a></dt>
-<dd><p>Obtains the number of elements held by this queue.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="DistributedDeque.DistributedDeque.contains">
-<em class="property">proc </em><code class="descname">contains</code><span class="sig-paren">(</span><em>elt: eltType</em><span class="sig-paren">)</span>: bool<a class="headerlink" href="#DistributedDeque.DistributedDeque.contains" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs a lookup for the element in the data structure.</p>
-</dd></dl>
-
-<dl class="itermethod">
-<dt id="DistributedDeque.DistributedDeque.these">
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType<a class="headerlink" href="#DistributedDeque.DistributedDeque.these" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterate over all elements in the deque in the order specified.</p>
-<p><strong>Warning:</strong> Calling other methods while inside of an iterator is not safe as
-it will likely lead to deadlock.</p>
-<p><strong>FIXME:</strong> Likely can be worked around by either using snapshot iteration approach
-or by making the lock reentrant and forcing all iterators to acquire all locks in
-some global locking order.</p>
-</dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType</dt>
-<dd></dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em><span class="sig-paren">)</span>: eltType</dt>
-<dd></dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em>, <em>param tag: iterKind</em><span class="sig-paren">)</span></dt>
-<dd></dd></dl>
-
-<dl class="itermethod">
-<dt>
-<em class="property">iter </em><code class="descname">these</code><span class="sig-paren">(</span><em>param order: Ordering = Ordering.NONE</em>, <em>param tag: iterKind</em>, <em>followThis</em><span class="sig-paren">)</span></dt>
+<dt id="DistributedDeque.DistDeque.DistDeque">
+<em class="property">proc </em><code class="descname">DistDeque</code><span class="sig-paren">(</span><em>type eltType</em>, <em>cap = -1</em>, <em>targetLocales = Locales</em><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistDeque.DistDeque" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
-<dt id="DistributedDeque.DistributedDeque.deinit">
-<em class="property">proc </em><code class="descname">deinit</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistributedDeque.deinit" title="Permalink to this definition">¶</a></dt>
+<dt id="DistributedDeque.DistDeque._value">
+<em class="property">proc </em><code class="descname">_value</code><a class="headerlink" href="#DistributedDeque.DistDeque._value" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="DistributedDeque.DistDeque.forwarding_expr2__value">
+<em class="property">proc </em><code class="descname">forwarding_expr2__value</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#DistributedDeque.DistDeque.forwarding_expr2__value" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>

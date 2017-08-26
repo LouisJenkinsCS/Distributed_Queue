@@ -1,6 +1,7 @@
 .. default-domain:: chpl
 
 .. module:: Collection
+   :synopsis: A 'Collection' is an interface for a data structure that is a 'contract' between
 
 Collection
 ==========
@@ -10,12 +11,23 @@ Collection
 
    use Collection;
 
-.. class:: Collection
 
-   
-   A 'Collection' is a data structure, a container for elements that provide support
-   for insert, lookup, remove, and iteration operations.
+A 'Collection' is an interface for a data structure that is a 'contract' between
+the user and implementer that it fulfills the following:
 
+1. Is safe parallel-safe, hence is safe to use across multiple tasks across multiple locales.
+2. Supports the basic operations that any data structure needs to be truly useful, that is:
+
+  a. Insertion of an arbitrary element. From this, we can insert bulk arbitrary elements.
+  b. Removal of an arbitrary element. From this, we can remove bulk arbitrary elements.
+  c. Iteration over all elements. From this, we can perform lookups over all elements.
+
+From the standpoint of the user, who directly benefits, they obtain a very nice but minimal
+guarantee on the object they are using, and from the implementor's view, they get to the
+benefit from both implementing a well-design interface, and from getting some utility methods 
+'for-free'.
+
+.. class:: CollectionImpl
 
    .. attribute:: type eltType
 
@@ -27,6 +39,20 @@ Collection
 
       
       Adds an element to this data structure.
+      
+
+   .. method:: proc addBulk(elts): int
+
+      
+      Add all elements in bulk to this data structure. If the data structure
+      rejects an element, we cease to offer more. We return the number of elements
+      successfully added to this data structure.
+      
+      **Warning:** While this method will add as many items as possible, it will `break`
+      when it is unable to consume more elements. Due to the fact that using `break` in
+      an iterator will cause a memory leak and potentially leave this data structure in
+      a undefined state, this should not be used to append another data structure to a
+      bounded structure unless it is known it will succeed.
       
 
    .. method:: proc remove(): (bool, eltType)
@@ -56,6 +82,14 @@ Collection
           var retval = c.remove();
         }
       
+      
+
+   .. method:: proc removeBulk(nElts: int)
+
+      
+      Removes `nElts` elements from this data structure, returning them as an array.
+      If the data structure fails to produce a new element, we cease and shrink the array
+      to its appropriate size and return that. 
       
 
    .. method:: proc contains(elt: eltType): bool
@@ -99,7 +133,7 @@ Collection
       
       Iterate over all elements in the data structure.
       
-      **BUG:** Compiler does not currently allow overloading standalone or leader/follower
+      **BUG:** Compiler does not currently allow overriding standalone or leader/follower
       iterators, and as such only serial iterators may be used with the base type. See
       issue #6998
       
@@ -107,7 +141,7 @@ Collection
       from a serial iterator, and so this *must* be avoided at all cost. See issue #6912
       
 
-.. function:: proc +=(ref c: Collection(?eltType), elt: eltType)
+.. function:: proc +=(ref c: CollectionImpl(?eltType), elt: eltType)
 
    
    Syntactic sugar for 'add'.
@@ -116,4 +150,5 @@ Collection
    because it is a class and can be used by value. Need a pragma to disable this?
    As such, this cannot be used where `ref` intents cannot be used, such as ``forall``
    and ``coforall`` loops.
+   
 
